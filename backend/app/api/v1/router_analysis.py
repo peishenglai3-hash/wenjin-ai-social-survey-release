@@ -8,7 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_ai_service, get_db
-from app.models.survey import AnalysisResult
+from app.api.deps_auth import get_current_profile
+from app.models.survey import AnalysisResult, SurveyProject, UserProfile
 from app.services.ai import AIService
 from app.services.sociobench import sociobench_kb
 from app.skills.mode_prompts import (
@@ -106,8 +107,15 @@ def _build_analysis_user_prompt(
 
 
 @router.get("/analysis/summary")
-async def analysis_summary(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(AnalysisResult))
+async def analysis_summary(
+    profile: UserProfile = Depends(get_current_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(AnalysisResult)
+        .join(SurveyProject, SurveyProject.id == AnalysisResult.project_id)
+        .where(SurveyProject.profile_id == profile.id)
+    )
     analyses = result.scalars().all()
     return {
         "total_analyses": len(analyses),
@@ -120,7 +128,12 @@ async def analysis_summary(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/analysis/run")
-async def analysis_run(payload: dict, ai: AIService = Depends(get_ai_service), db: AsyncSession = Depends(get_db)):
+async def analysis_run(
+    payload: dict,
+    profile: UserProfile = Depends(get_current_profile),
+    ai: AIService = Depends(get_ai_service),
+    db: AsyncSession = Depends(get_db),
+):
     data_type = payload.get("type", "interview")
     content = payload.get("content", "")
     paradigm = payload.get("paradigm", "qualitative")
@@ -133,6 +146,20 @@ async def analysis_run(payload: dict, ai: AIService = Depends(get_ai_service), d
         return {"error": "content is required"}
     if theme not in ("academic", "government", "youth"):
         theme = "academic"
+
+    try:
+        project_id = int(project_id or 0)
+    except (TypeError, ValueError):
+        project_id = 0
+    if project_id:
+        project_result = await db.execute(
+            select(SurveyProject).where(
+                SurveyProject.id == project_id,
+                SurveyProject.profile_id == profile.id,
+            )
+        )
+        if project_result.scalar_one_or_none() is None:
+            return {"error": "Project not found"}
 
     system_prompt = _build_analysis_system_prompt(theme)
     user_prompt = _build_analysis_user_prompt(
