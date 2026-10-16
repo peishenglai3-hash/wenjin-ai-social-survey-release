@@ -31,20 +31,24 @@ export default function Collaboration() {
   useEffect(() => {
     if (!config.collaborationV1Enabled || !project) return;
     let active = true;
-    setLoading(true);
-    setError("");
-    Promise.all([listCollaborationMembers(project.id), listResearchArtifacts(project.id)])
-      .then(([memberData, artifactData]) => {
+    void Promise.resolve().then(async () => {
+      if (!active) return;
+      setLoading(true);
+      setError("");
+      try {
+        const [memberData, artifactData] = await Promise.all([
+          listCollaborationMembers(project.id),
+          listResearchArtifacts(project.id),
+        ]);
         if (!active) return;
         setMembers(memberData.members);
         setArtifacts(artifactData.artifacts);
-      })
-      .catch(() => {
+      } catch {
         if (active) setError("协作数据加载失败，请确认项目权限和网络状态。");
-      })
-      .finally(() => {
+      } finally {
         if (active) setLoading(false);
-      });
+      }
+    });
     return () => {
       active = false;
     };
