@@ -15,7 +15,7 @@ from app.api.deps import get_ai_service, get_db, ensure_upload_dir
 from app.api.deps_auth import require_user, get_current_profile
 from app.models.user import UserAccount
 from app.config import settings
-from app.models.survey import SurveySession, UserProfile
+from app.models.survey import FieldNote, SurveyProject, SurveySession, UserProfile
 from app.services.ai import AIService
 from app.services.speech_engine import speech_engine
 from app.services.emotion_tracker import emotion_tracker
@@ -53,6 +53,39 @@ def _find_uploaded_file(file_id: str) -> Path | None:
         if resolved.is_file() and resolved.parent == root:
             return resolved
     return None
+
+
+async def _find_owned_session(
+    db: AsyncSession,
+    session_id: int,
+    profile_id: int,
+) -> SurveySession | None:
+    result = await db.execute(
+        select(SurveySession)
+        .join(SurveyProject, SurveyProject.id == SurveySession.project_id)
+        .where(
+            SurveySession.id == session_id,
+            SurveyProject.profile_id == profile_id,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def _find_owned_note(
+    db: AsyncSession,
+    note_id: int,
+    profile_id: int,
+) -> FieldNote | None:
+    result = await db.execute(
+        select(FieldNote)
+        .join(SurveySession, SurveySession.id == FieldNote.session_id)
+        .join(SurveyProject, SurveyProject.id == SurveySession.project_id)
+        .where(
+            FieldNote.id == note_id,
+            SurveyProject.profile_id == profile_id,
+        )
+    )
+    return result.scalar_one_or_none()
 
 # ── Theme-specific prompt modifiers ────────────────────────────────
 
@@ -219,10 +252,28 @@ async def fieldwork_summarize_stream(payload: dict, ai: AIService = Depends(get_
 # ── Session CRUD ────────────────────────────────────────────────────
 
 @router.post("/fieldwork/sessions")
-async def create_session(payload: dict, db: AsyncSession = Depends(get_db),
-                         ai: AIService = Depends(get_ai_service)):
+async def create_session(
+    payload: dict,
+    profile: UserProfile = Depends(get_current_profile),
+    db: AsyncSession = Depends(get_db),
+    ai: AIService = Depends(get_ai_service),
+):
+    try:
+        project_id = int(payload.get("project_id", 0))
+    except (TypeError, ValueError):
+        project_id = 0
+    project_result = await db.execute(
+        select(SurveyProject).where(
+            SurveyProject.id == project_id,
+            SurveyProject.profile_id == profile.id,
+        )
+    )
+    project = project_result.scalar_one_or_none()
+    if project is None:
+        return {"error": "Project not found"}
+
     session = SurveySession(
-        project_id=payload.get("project_id", 0),
+        project_id=project.id,
         transcript_text=payload.get("transcript_text", ""),
         notes=payload.get("notes", ""),
         summary_text=payload.get("summary_text", ""),
@@ -259,9 +310,13 @@ async def create_session(payload: dict, db: AsyncSession = Depends(get_db),
 
 
 @router.patch("/fieldwork/sessions/{session_id}")
-async def update_session(session_id: int, payload: dict, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(SurveySession).where(SurveySession.id == session_id))
-    session = result.scalar_one_or_none()
+async def update_session(
+    session_id: int,
+    payload: dict,
+    profile: UserProfile = Depends(get_current_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    session = await _find_owned_session(db, session_id, profile.id)
     if not session:
         return {"error": "Session not found"}
 
@@ -283,9 +338,12 @@ async def update_session(session_id: int, payload: dict, db: AsyncSession = Depe
 async def get_session_notes(
     session_id: int,
     note_type: str | None = None,
+    profile: UserProfile = Depends(get_current_profile),
     db: AsyncSession = Depends(get_db),
 ):
     """List field notes for a session, optionally filtered by type."""
+    if await _find_owned_session(db, session_id, profile.id) is None:
+        return {"error": "Session not found"}
     notes = await list_notes(db, session_id, note_type=note_type)
     return {
         "notes": [
@@ -315,6 +373,8 @@ async def edit_note(
 ):
     """Edit a field note's content."""
     content = payload.get("content", "")
+    if await _find_owned_note(db, note_id, profile.id) is None:
+        return {"error": "Note not found"}
     note = await update_note(db, note_id, content, editor_profile_id=profile.id)
     if note is None:
         return {"error": "Note not found"}
@@ -327,8 +387,14 @@ async def edit_note(
 
 
 @router.delete("/fieldwork/notes/{note_id}")
-async def remove_note(note_id: int, db: AsyncSession = Depends(get_db)):
+async def remove_note(
+    note_id: int,
+    profile: UserProfile = Depends(get_current_profile),
+    db: AsyncSession = Depends(get_db),
+):
     """Delete a field note."""
+    if await _find_owned_note(db, note_id, profile.id) is None:
+        return {"error": "Note not found"}
     ok = await delete_note(db, note_id)
     if not ok:
         return {"error": "Note not found"}
@@ -339,12 +405,12 @@ async def remove_note(note_id: int, db: AsyncSession = Depends(get_db)):
 async def regenerate_notes(
     session_id: int,
     payload: dict,
+    profile: UserProfile = Depends(get_current_profile),
     db: AsyncSession = Depends(get_db),
     ai: AIService = Depends(get_ai_service),
 ):
     """Manually trigger field note regeneration for a session."""
-    result = await db.execute(select(SurveySession).where(SurveySession.id == session_id))
-    session = result.scalar_one_or_none()
+    session = await _find_owned_session(db, session_id, profile.id)
     if not session:
         return {"error": "Session not found"}
     transcript = payload.get("transcript_text") or session.transcript_text or ""
@@ -366,10 +432,13 @@ async def regenerate_notes(
 async def export_session_notes(
     session_id: int,
     fmt: str = "markdown",
+    profile: UserProfile = Depends(get_current_profile),
     db: AsyncSession = Depends(get_db),
 ):
     """Export field notes for a session (markdown or json)."""
     from fastapi.responses import PlainTextResponse
+    if await _find_owned_session(db, session_id, profile.id) is None:
+        return {"error": "Session not found"}
     result = await export_notes(db, session_id, fmt=fmt)
     media = "application/json" if fmt == "json" else "text/markdown; charset=utf-8"
     return PlainTextResponse(content=result, media_type=media)
