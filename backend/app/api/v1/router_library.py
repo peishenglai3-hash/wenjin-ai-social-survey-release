@@ -5,17 +5,29 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_ai_service, get_db
-from app.models.survey import AnalysisResult, ExportDocument, SurveyProject, SurveySession
+from app.api.deps_auth import get_current_profile
+from app.models.survey import (
+    AnalysisResult,
+    ExportDocument,
+    SurveyProject,
+    SurveySession,
+    UserProfile,
+)
 from app.services.ai import AIService
 
 router = APIRouter(prefix="/library", tags=["library"])
 
 
 @router.get("")
-async def list_library(db: AsyncSession = Depends(get_db)):
+async def list_library(
+    profile: UserProfile = Depends(get_current_profile),
+    db: AsyncSession = Depends(get_db),
+):
     """List all completed or archived survey projects."""
     result = await db.execute(
-        select(SurveyProject).order_by(SurveyProject.updated_at.desc())
+        select(SurveyProject)
+        .where(SurveyProject.profile_id == profile.id)
+        .order_by(SurveyProject.updated_at.desc())
     )
     projects = result.scalars().all()
     return {
@@ -36,9 +48,18 @@ async def list_library(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{project_id}")
-async def get_library_item(project_id: int, db: AsyncSession = Depends(get_db)):
+async def get_library_item(
+    project_id: int,
+    profile: UserProfile = Depends(get_current_profile),
+    db: AsyncSession = Depends(get_db),
+):
     """Full detail view of a past project — all phases and outputs."""
-    result = await db.execute(select(SurveyProject).where(SurveyProject.id == project_id))
+    result = await db.execute(
+        select(SurveyProject).where(
+            SurveyProject.id == project_id,
+            SurveyProject.profile_id == profile.id,
+        )
+    )
     project = result.scalar_one_or_none()
     if not project:
         return {"error": "Project not found"}
@@ -93,9 +114,19 @@ async def get_library_item(project_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{project_id}/lessons")
-async def generate_lessons(project_id: int, ai: AIService = Depends(get_ai_service), db: AsyncSession = Depends(get_db)):
+async def generate_lessons(
+    project_id: int,
+    profile: UserProfile = Depends(get_current_profile),
+    ai: AIService = Depends(get_ai_service),
+    db: AsyncSession = Depends(get_db),
+):
     """AI-generated lessons learned from a complete project lifecycle."""
-    result = await db.execute(select(SurveyProject).where(SurveyProject.id == project_id))
+    result = await db.execute(
+        select(SurveyProject).where(
+            SurveyProject.id == project_id,
+            SurveyProject.profile_id == profile.id,
+        )
+    )
     project = result.scalar_one_or_none()
     if not project:
         return {"error": "Project not found"}
@@ -141,8 +172,17 @@ async def generate_lessons(project_id: int, ai: AIService = Depends(get_ai_servi
 
 
 @router.delete("/{project_id}")
-async def delete_project(project_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(SurveyProject).where(SurveyProject.id == project_id))
+async def delete_project(
+    project_id: int,
+    profile: UserProfile = Depends(get_current_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(SurveyProject).where(
+            SurveyProject.id == project_id,
+            SurveyProject.profile_id == profile.id,
+        )
+    )
     project = result.scalar_one_or_none()
     if not project:
         return {"error": "Project not found"}
