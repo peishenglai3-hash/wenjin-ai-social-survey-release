@@ -6,13 +6,49 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.api.deps_auth import get_current_profile
-from app.models.survey import Questionnaire, QuestionnaireResponse, UserProfile
+from app.models.survey import (
+    Questionnaire,
+    QuestionnaireResponse,
+    SurveyProject,
+    SurveySession,
+    UserProfile,
+)
 from app.schemas.questionnaire import (
     QuestionnaireSave, QuestionnaireOut, ResponseSubmit, ResponseOut,
     QuestionnaireStats, QuestionStat,
 )
 
 router = APIRouter(tags=["questionnaire"])
+
+
+async def _owned_questionnaire(
+    db: AsyncSession,
+    questionnaire_id: int,
+    profile_id: int,
+) -> Questionnaire | None:
+    result = await db.execute(
+        select(Questionnaire)
+        .join(SurveyProject, SurveyProject.id == Questionnaire.project_id)
+        .where(
+            Questionnaire.id == questionnaire_id,
+            SurveyProject.profile_id == profile_id,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def _owned_project(
+    db: AsyncSession,
+    project_id: int,
+    profile_id: int,
+) -> SurveyProject | None:
+    result = await db.execute(
+        select(SurveyProject).where(
+            SurveyProject.id == project_id,
+            SurveyProject.profile_id == profile_id,
+        )
+    )
+    return result.scalar_one_or_none()
 
 
 @router.post("/questionnaire/save", response_model=QuestionnaireOut)
@@ -22,6 +58,8 @@ async def save_questionnaire(
     db: AsyncSession = Depends(get_db),
 ):
     """Save AI-generated questionnaire JSON as structured data."""
+    if await _owned_project(db, body.project_id, profile.id) is None:
+        raise HTTPException(404, "项目不存在")
     q = Questionnaire(
         project_id=body.project_id,
         title=body.title,
@@ -40,17 +78,27 @@ async def save_questionnaire(
 
 
 @router.get("/questionnaire/{id}", response_model=QuestionnaireOut)
-async def get_questionnaire(id: int, db: AsyncSession = Depends(get_db)):
+async def get_questionnaire(
+    id: int,
+    profile: UserProfile = Depends(get_current_profile),
+    db: AsyncSession = Depends(get_db),
+):
     """Get structured questionnaire by ID."""
-    q = await db.get(Questionnaire, id)
+    q = await _owned_questionnaire(db, id, profile.id)
     if not q:
         raise HTTPException(404, "问卷不存在")
     return q
 
 
 @router.get("/questionnaire/by-project/{project_id}", response_model=list[QuestionnaireOut])
-async def list_questionnaires(project_id: int, db: AsyncSession = Depends(get_db)):
+async def list_questionnaires(
+    project_id: int,
+    profile: UserProfile = Depends(get_current_profile),
+    db: AsyncSession = Depends(get_db),
+):
     """List all questionnaires for a project."""
+    if await _owned_project(db, project_id, profile.id) is None:
+        raise HTTPException(404, "项目不存在")
     result = await db.execute(
         select(Questionnaire)
         .where(Questionnaire.project_id == project_id, Questionnaire.is_active == True)
@@ -63,12 +111,26 @@ async def list_questionnaires(project_id: int, db: AsyncSession = Depends(get_db
 async def submit_response(
     id: int,
     body: ResponseSubmit,
+    profile: UserProfile = Depends(get_current_profile),
     db: AsyncSession = Depends(get_db),
 ):
     """Submit a filled questionnaire response."""
-    q = await db.get(Questionnaire, id)
+    q = await _owned_questionnaire(db, id, profile.id)
     if not q:
         raise HTTPException(404, "问卷不存在")
+
+    if body.session_id is not None:
+        session_result = await db.execute(
+            select(SurveySession)
+            .join(SurveyProject, SurveyProject.id == SurveySession.project_id)
+            .where(
+                SurveySession.id == body.session_id,
+                SurveySession.project_id == q.project_id,
+                SurveyProject.profile_id == profile.id,
+            )
+        )
+        if session_result.scalar_one_or_none() is None:
+            raise HTTPException(404, "调查会话不存在")
 
     answers_dict = {}
     for a in body.answers:
@@ -95,8 +157,14 @@ async def submit_response(
 
 
 @router.get("/questionnaire/{id}/responses", response_model=list[ResponseOut])
-async def list_responses(id: int, db: AsyncSession = Depends(get_db)):
+async def list_responses(
+    id: int,
+    profile: UserProfile = Depends(get_current_profile),
+    db: AsyncSession = Depends(get_db),
+):
     """List all responses for a questionnaire."""
+    if await _owned_questionnaire(db, id, profile.id) is None:
+        raise HTTPException(404, "问卷不存在")
     result = await db.execute(
         select(QuestionnaireResponse)
         .where(QuestionnaireResponse.questionnaire_id == id)
@@ -106,9 +174,13 @@ async def list_responses(id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/questionnaire/{id}/stats", response_model=QuestionnaireStats)
-async def questionnaire_stats(id: int, db: AsyncSession = Depends(get_db)):
+async def questionnaire_stats(
+    id: int,
+    profile: UserProfile = Depends(get_current_profile),
+    db: AsyncSession = Depends(get_db),
+):
     """Get descriptive statistics for a questionnaire."""
-    q = await db.get(Questionnaire, id)
+    q = await _owned_questionnaire(db, id, profile.id)
     if not q:
         raise HTTPException(404, "问卷不存在")
 
@@ -170,7 +242,7 @@ async def delete_questionnaire(
     db: AsyncSession = Depends(get_db),
 ):
     """Soft-delete a questionnaire."""
-    q = await db.get(Questionnaire, id)
+    q = await _owned_questionnaire(db, id, profile.id)
     if not q:
         raise HTTPException(404, "问卷不存在")
     q.is_active = False
