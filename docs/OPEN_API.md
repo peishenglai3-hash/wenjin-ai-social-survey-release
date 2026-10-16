@@ -71,6 +71,8 @@
 
 API token 生命周期、webhook、SDK、流式公开端点、embedding/vision/transcribe 的统一 contract，以及第三方可执行扩展隔离仍需单独设计、测试和安全复核。
 
+第三方技能市场的当前边界见 [`docs/EXTENSION_SECURITY.md`](EXTENSION_SECURITY.md)：开放 API 与社区技能都不接受客户端 provider key，也不把社区文本升级为服务端可执行代码。
+
 ## 客户端与 WebSocket 边界
 
 HTTP 客户端只需要登录后的问津 access token。田野实时 ASR、pipeline 和 facial WebSocket 入口使用浏览器可发送的 `Sec-WebSocket-Protocol: bearer, <access-token>` 协商方式；服务端只返回 `bearer` 子协议，拒绝缺失、过期或非 access token。不要把 token 拼到 WebSocket URL、日志或示例链接中。

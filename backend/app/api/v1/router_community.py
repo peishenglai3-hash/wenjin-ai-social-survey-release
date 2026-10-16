@@ -24,6 +24,8 @@ from app.api.deps import get_db
 from app.api.deps_auth import require_user, get_current_profile
 from app.models.survey import UserSkill, UserProfile
 from app.models.user import UserAccount
+from app.schemas.community import CommunitySkillPublish
+from app.services.skill_safety import validate_public_skill
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +58,7 @@ def _skill_row(s) -> dict:
         "min_app_version": getattr(s, "min_app_version", "0.2.0"),
         "forked_from_id": getattr(s, "forked_from_id", None),
         "fork_lineage": getattr(s, "fork_lineage", "[]"),
+        "execution_mode": "prompt_only",
         "author_id": s.profile_id,
         "created_at": s.created_at.isoformat() if s.created_at else None,
     }
@@ -220,7 +223,7 @@ async def get_community_skill(
 
 @router.post("/skills/publish")
 async def publish_skill(
-    payload: dict,
+    payload: CommunitySkillPublish,
     db: AsyncSession = Depends(get_db),
     user: UserAccount = Depends(require_user),
     profile: UserProfile = Depends(get_current_profile),
@@ -230,33 +233,34 @@ async def publish_skill(
     Required: skill_id
     Optional: readme, example_input, example_output, compatible_models
     """
-    skill_id = payload.get("skill_id")
-
-    if not skill_id:
-        return {"ok": False, "error": "skill_id is required"}
-
-    skill = await db.get(UserSkill, int(skill_id))
+    skill_id = payload.skill_id
+    skill = await db.get(UserSkill, skill_id)
     if not skill:
         return {"ok": False, "error": "Skill not found"}
     if skill.profile_id != profile.id:
         return {"ok": False, "error": "You can only publish your own skills"}
 
+    validate_public_skill(
+        name=skill.name,
+        description=skill.description,
+        prompt_template=skill.prompt_template,
+        readme=payload.readme if payload.readme is not None else skill.readme,
+        example_input=payload.example_input if payload.example_input is not None else skill.example_input,
+        example_output=payload.example_output if payload.example_output is not None else skill.example_output,
+    )
+
     # Update community fields
     skill.is_public = True
     skill.published_at = datetime.now(timezone.utc)
 
-    readme = payload.get("readme")
-    if readme:
-        skill.readme = readme
-    example_input = payload.get("example_input")
-    if example_input:
-        skill.example_input = example_input
-    example_output = payload.get("example_output")
-    if example_output:
-        skill.example_output = example_output
-    compatible_models = payload.get("compatible_models")
-    if compatible_models:
-        skill.compatible_models = json.dumps(compatible_models)
+    if payload.readme:
+        skill.readme = payload.readme
+    if payload.example_input:
+        skill.example_input = payload.example_input
+    if payload.example_output:
+        skill.example_output = payload.example_output
+    if payload.compatible_models:
+        skill.compatible_models = json.dumps(payload.compatible_models)
 
     await db.commit()
     await db.refresh(skill)

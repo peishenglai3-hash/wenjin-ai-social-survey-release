@@ -19,6 +19,7 @@ from app.models.user import UserAccount
 from app.models.survey import UserProfile
 from app.services.ai import AIService
 from app.services.memory_service import MemoryService
+from app.services.skill_safety import render_skill_prompt
 
 router = APIRouter(prefix="/memory", tags=["memory"])
 
@@ -237,9 +238,7 @@ async def use_skill(
         return {"ok": False, "error": "Skill not found"}
 
     # Fill template placeholders
-    prompt = skill.prompt_template
-    for key, val in context.items():
-        prompt = prompt.replace(f"{{{key}}}", str(val))
+    prompt = render_skill_prompt(skill.prompt_template, context)
 
     # Execute
     messages = [

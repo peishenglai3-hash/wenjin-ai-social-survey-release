@@ -44,7 +44,7 @@
 - [x] A2 OpenAI-compatible/DashScope server-side BYOK adapters（服务端 key、无 key fail-closed 和上游错误归一化已覆盖）。
 - [x] A3 gateway scope、项目归属、限流、配额、有限重试、运营审计和 redaction（API token 生命周期、webhook、SDK 与扩展隔离待补）。
 - [x] A4 OpenAPI snapshot、最小标准库 SDK、示例和兼容性文档（流式公开端点仍未纳入 V1）。
-- [ ] A5 扩展执行隔离拒绝测试和安全边界说明。
+- [x] A5 扩展执行隔离拒绝测试和安全边界说明（当前仅开放 prompt-only 声明式技能；代码/工具扩展未开放）。
 
 ## 文档与发布
 

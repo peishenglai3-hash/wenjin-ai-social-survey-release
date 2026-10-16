@@ -30,3 +30,19 @@ async def test_community_skill_detail_and_fork_use_declared_model_fields(client,
     fork = await client.post(f"/api/v1/community/skills/{skill.id}/fork", json={})
     assert fork.status_code == 200
     assert fork.json()["skill"]["forked_from_id"] == skill.id
+    assert detail.json()["execution_mode"] == "prompt_only"
+
+    published = await client.post(
+        "/api/v1/community/skills/publish",
+        json={"skill_id": skill.id, "readme": "Safe usage notes", "compatible_models": ["fake"]},
+    )
+    assert published.status_code == 200
+    assert published.json()["skill"]["execution_mode"] == "prompt_only"
+
+    skill.prompt_template = "api_key=should-not-be-published"
+    await db_session.commit()
+    rejected = await client.post(
+        "/api/v1/community/skills/publish",
+        json={"skill_id": skill.id},
+    )
+    assert rejected.status_code == 422
