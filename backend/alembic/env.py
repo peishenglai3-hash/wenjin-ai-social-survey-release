@@ -19,6 +19,7 @@ import app.models  # noqa: F401 — triggers __init__.py which imports most mode
 import app.models.user  # noqa: F401 — UserAccount, UserAuthMethod (not in __init__.py)
 import app.models.interview  # noqa: F401 — InterviewSegment, EmotionSnapshot, etc.
 import app.models.analytics  # noqa: F401 — analytics events table
+import app.models.knowledge_card  # noqa: F401 — deployment-owned knowledge tables
 
 # this is the Alembic Config object
 config = context.config

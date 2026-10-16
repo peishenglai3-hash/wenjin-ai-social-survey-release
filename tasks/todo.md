@@ -24,7 +24,7 @@
 
 ## 知识流水线
 
-- [ ] K1 知识包 schema、validator、manifest 和私有审计目录。
+- [x] K1 知识包 schema、validator、manifest 和私有审计目录（运行时仅接受 approved 且 hash 校验通过的私有包）。
 - [ ] K2 原有知识/训练材料分类、脱敏、授权和版本登记。
 - [x] K3 使用联网研究整理中英文社会调查资料候选集（私有审计暂存）。
 - [x] 委派独立知识审计子代理，禁止其写入公开 runtime。

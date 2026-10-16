@@ -9,11 +9,11 @@ import json, logging
 from pathlib import Path
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.config import settings
 from app.models.knowledge_card import ReferenceCard, SkillsCluster, TriggerKeyword
+from app.services.knowledge_manifest import KnowledgeManifestError, iter_approved_items
 
 logger = logging.getLogger(__name__)
-CARDS_DIR = Path(__file__).resolve().parent.parent / "data" / "knowledge-cards"
-
 CLUSTERS = [
     {"cluster_id": "P0-2", "name": "Cultural Knowledge", "description": "Cultural sensitivity reminders during interviews", "priority": 0,
      "prompt_template": "Cultural reminder: {trigger_topic}\nRegion: {region_context}\nNote: {cultural_note}\nFramework: {core_concepts} (source: {source_slug})\nAction: {practical_guidelines}",
@@ -88,34 +88,6 @@ async def seed_clusters(db: AsyncSession):
     await db.flush()
 
 
-async def ingest_cards(db: AsyncSession) -> int:
-    count = 0
-    for jf in sorted(CARDS_DIR.glob("*_cards.json")):
-        data = json.loads(jf.read_text(encoding="utf-8"))
-        source_slug = data.get("source", jf.stem.replace("_cards", ""))
-        clusters = _assign_clusters(source_slug)
-        for card in data.get("cards", []):
-            db.add(ReferenceCard(
-                source_slug=source_slug,
-                source_file=card.get("source_file", ""),
-                source_section=card.get("source_section", ""),
-                keywords=card.get("keywords", []),
-                core_concepts=card.get("core_concepts", []),
-                practical_guidelines=card.get("practical_guidelines", []),
-                case_studies=card.get("case_studies", []),
-                ethical_notes=card.get("ethical_notes", []),
-                cultural_knowledge=card.get("cultural_knowledge", []),
-                applicable_scenarios=card.get("applicable_scenarios", []),
-                confidence=card.get("confidence", 3),
-                extracted_at=card.get("extracted_at", ""),
-                clusters=clusters,
-                search_text=_build_search_text(card),
-            ))
-            count += 1
-    await db.flush()
-    return count
-
-
 async def seed_triggers(db: AsyncSession):
     for c in CLUSTERS:
         for sm in c.get("sub_modules", []):
@@ -131,11 +103,65 @@ async def seed_triggers(db: AsyncSession):
 async def ingest_all(db: AsyncSession) -> dict:
     result = await db.execute(select(func.count(ReferenceCard.id)))
     existing = result.scalar() or 0
-    if existing >= 48:
-        return {"cards_ingested": 0, "total_cards": existing, "clusters": len(CLUSTERS), "status": "already_complete"}
     await seed_clusters(db)
-    ingested = await ingest_cards(db)
     await seed_triggers(db)
+
+    if not settings.knowledge_dir:
+        await db.commit()
+        return {
+            "cards_ingested": 0,
+            "total_cards": existing,
+            "clusters": len(CLUSTERS),
+            "status": "manifest_required",
+        }
+
+    try:
+        approved_items = iter_approved_items(settings.knowledge_dir)
+    except KnowledgeManifestError as exc:
+        logger.warning("Knowledge runtime gate rejected package: %s", exc)
+        await db.commit()
+        return {
+            "cards_ingested": 0,
+            "total_cards": existing,
+            "clusters": len(CLUSTERS),
+            "status": "manifest_invalid",
+        }
+
+    ingested = 0
+    for item, cards_path in approved_items:
+        already_loaded = await db.scalar(
+            select(func.count(ReferenceCard.id)).where(ReferenceCard.source_slug == item.source_slug)
+        )
+        if already_loaded:
+            continue
+        data = json.loads(cards_path.read_text(encoding="utf-8"))
+        if data.get("source") and data["source"] != item.source_slug:
+            logger.warning("Skipping source mismatch for %s", item.source_slug)
+            continue
+        clusters = _assign_clusters(item.source_slug)
+        for card in data.get("cards", []):
+            db.add(ReferenceCard(
+                source_slug=item.source_slug,
+                source_file=card.get("source_file", ""),
+                source_section=card.get("source_section", ""),
+                keywords=card.get("keywords", []),
+                core_concepts=card.get("core_concepts", []),
+                practical_guidelines=card.get("practical_guidelines", []),
+                case_studies=card.get("case_studies", []),
+                ethical_notes=card.get("ethical_notes", []),
+                cultural_knowledge=card.get("cultural_knowledge", []),
+                applicable_scenarios=card.get("applicable_scenarios", []),
+                confidence=card.get("confidence", 3),
+                extracted_at=card.get("extracted_at", ""),
+                clusters=clusters,
+                search_text=_build_search_text(card),
+            ))
+            ingested += 1
     await db.commit()
     total = await db.execute(select(func.count(ReferenceCard.id)))
-    return {"cards_ingested": ingested, "total_cards": total.scalar(), "clusters": len(CLUSTERS), "status": "ok"}
+    return {
+        "cards_ingested": ingested,
+        "total_cards": total.scalar(),
+        "clusters": len(CLUSTERS),
+        "status": "ok" if ingested else "already_complete",
+    }

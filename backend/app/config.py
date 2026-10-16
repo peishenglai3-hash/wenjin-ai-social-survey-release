@@ -129,6 +129,10 @@ class Settings(BaseSettings):
     # Set PUBLIC_BASE_URL only in a deployment that intentionally exposes a callback URL.
     public_base_url: str = ""
 
+    # Optional deployment-owned knowledge package. Runtime ingestion requires
+    # a separately audited and manually approved manifest in this directory.
+    knowledge_dir: str = ""
+
     @field_validator("jwt_secret")
     @classmethod
     def validate_jwt_secret(cls, value: str) -> str:

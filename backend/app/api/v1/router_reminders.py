@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
+from app.api.deps_auth import require_admin
+from app.models.user import UserAccount
 from app.services.contextual_reminders import get_reminders
 from app.services.knowledge_ingestion import ingest_all
 
@@ -33,7 +35,10 @@ async def reminders(
 
 
 @router.post("/ingest")
-async def run_ingestion(db: AsyncSession = Depends(get_db)):
+async def run_ingestion(
+    db: AsyncSession = Depends(get_db),
+    _: UserAccount = Depends(require_admin),
+):
     """Admin: trigger knowledge card ingestion from JSON files. Idempotent."""
     result = await ingest_all(db)
     return result

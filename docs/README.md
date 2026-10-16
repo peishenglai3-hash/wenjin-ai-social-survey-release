@@ -6,4 +6,4 @@
 
 ## 可选知识卡片
 
-公开树不包含任何书籍、论文全文、OCR、切片或知识卡片。`backend/app/services/knowledge_ingestion.py` 只提供一个可选的本地 JSON 导入路径；部署者应把自己拥有再许可权的卡片通过未跟踪的本地目录或私有挂载提供给服务，并先确认 `source_file`、来源、许可和删除策略。不要把第三方全文或其衍生切片直接复制回仓库。
+公开树不包含任何书籍、论文全文、OCR、切片或知识卡片。`backend/app/services/knowledge_ingestion.py` 只接受部署者私有挂载的、经过 `manifest.json` 审计和人工批准的结构化 JSON；没有 manifest、状态不是 `approved`、条目被撤销或哈希不匹配时不会进入 runtime。部署者应先确认 `source_file`、来源、许可和删除策略，不要把第三方全文或其衍生切片直接复制回仓库。详见 [`KNOWLEDGE_INGESTION.md`](KNOWLEDGE_INGESTION.md)。
