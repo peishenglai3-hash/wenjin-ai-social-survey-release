@@ -12,6 +12,7 @@ import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from urllib.parse import urlencode, urlsplit
 
 import httpx
 from jose import JWTError, jwt
@@ -25,8 +26,28 @@ _STATE_SECRET = settings.jwt_secret  # reuse app JWT secret for state signing
 _STATE_EXPIRE_MINUTES = 10
 
 
+def normalize_redirect_path(value: str | None) -> str:
+    """Allow only a same-origin frontend path in the signed OAuth state.
+
+    OAuth callbacks must never redirect to a client-controlled absolute URL.
+    Query parameters are allowed because the value is encoded as data in the
+    final callback URL, but schemes, hosts, network-path references and
+    backslashes are rejected.
+    """
+    raw = (value or "/").strip()
+    if len(raw) > 512 or "\\" in raw:
+        raise ValueError("redirect path is invalid")
+    parsed = urlsplit(raw)
+    if parsed.scheme or parsed.netloc or not parsed.path.startswith("/"):
+        raise ValueError("redirect path must be same-origin")
+    if raw.startswith("//"):
+        raise ValueError("redirect path must be same-origin")
+    return raw
+
+
 def _build_state_token(redirect_to: str = "/") -> str:
     """Build a signed state token carrying redirect destination + nonce."""
+    redirect_to = normalize_redirect_path(redirect_to)
     payload = {
         "nonce": secrets.token_hex(16),
         "redirect_to": redirect_to,
@@ -50,6 +71,7 @@ def get_authorize_url(redirect_to: str = "/") -> tuple[str, str]:
     Returns (authorize_url, state_token).
     The frontend should store the state_token and pass it to the callback.
     """
+    redirect_to = normalize_redirect_path(redirect_to)
     state = _build_state_token(redirect_to)
     sandbox = settings.orcid_sandbox
     base_url = "https://sandbox.orcid.org" if sandbox else "https://orcid.org"
@@ -61,7 +83,7 @@ def get_authorize_url(redirect_to: str = "/") -> tuple[str, str]:
         "redirect_uri": settings.orcid_redirect_uri,
         "state": state,
     }
-    query = "&".join(f"{k}={v}" for k, v in params.items())
+    query = urlencode(params)
     url = f"{base_url}/oauth/authorize?{query}"
     return url, state
 
@@ -89,7 +111,9 @@ async def exchange_code(code: str) -> dict:
             headers={"Accept": "application/json"},
         )
         if resp.status_code != 200:
-            logger.error("ORCID token exchange failed: %s %s", resp.status_code, resp.text)
+            # The response may contain provider diagnostics or reflected
+            # credentials. Keep it out of logs and the public exception.
+            logger.error("ORCID token exchange failed: status=%s", resp.status_code)
             raise ValueError(f"ORCID token exchange failed: {resp.status_code}")
 
         token_data = resp.json()

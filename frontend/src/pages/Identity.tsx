@@ -1,13 +1,36 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/client";
-import { useApp } from "../context/AppContext";
+import { useApp } from "../hooks/useApp";
 import SpectrumSliders, { type SpectrumDim } from "../components/SpectrumSliders";
 import "./Identity.css";
 
 interface Option {
   id: string;
   label: string;
+}
+
+interface ExtractedProfile {
+  parse_error?: boolean;
+  extraction_confidence?: number;
+  profile_summary?: string;
+  role?: string;
+  experience_level?: string;
+  paradigm_preference?: string;
+  scenario_preference?: string;
+  mbti?: string;
+  gender?: string;
+  age_range?: string;
+  mode?: string;
+  theme_preference?: string;
+  theory_driven?: number;
+  methodological_rigidity?: number;
+  analysis_depth?: number;
+  structure_preference?: number;
+  participation_level?: number;
+  tech_dependency?: number;
+  writing_style?: number;
+  learning_preference?: number;
 }
 
 type ProfileMode = "quick" | "deep";
@@ -42,7 +65,7 @@ export default function Identity() {
   const [keywords, setKeywords] = useState<string[]>([]);
   const [keywordInput, setKeywordInput] = useState("");
   const [extracting, setExtracting] = useState(false);
-  const [extracted, setExtracted] = useState<Record<string, any> | null>(null);
+  const [extracted, setExtracted] = useState<ExtractedProfile | null>(null);
   const [extractError, setExtractError] = useState("");
 
   // ── Keyword input handlers ──
@@ -91,7 +114,7 @@ export default function Identity() {
       }
       setSpectrum(spec);
     }).catch(() => {});
-  }, []);
+  }, [profile]);
 
   // ── If user already has a profile, pre-fill and switch to deep mode ──
   useEffect(() => {
@@ -184,7 +207,7 @@ export default function Identity() {
   const select = (label: string, key: string, options: Option[]) => (
     <div className="form-group" key={key}>
       <label>{label}</label>
-      <select value={(form as any)[key] || ""} onChange={(e) => update(key, e.target.value)}>
+      <select value={form[key as keyof typeof form] || ""} onChange={(e) => update(key, e.target.value)}>
         <option value="">请选择</option>
         {options.map((o) => (
           <option key={o.id} value={o.id}>{o.label}</option>
@@ -326,19 +349,19 @@ export default function Identity() {
                 <div className="extracted-chips">
                   <div className="chip-row">
                     <span className="chip-label">身份角色</span>
-                    <span className="chip value">{roleLabels[extracted.role] || extracted.role}</span>
+                    <span className="chip value">{extracted.role ? roleLabels[extracted.role] || extracted.role : ""}</span>
                   </div>
                   <div className="chip-row">
                     <span className="chip-label">调查经验</span>
-                    <span className="chip value">{expLabels[extracted.experience_level] || extracted.experience_level}</span>
+                    <span className="chip value">{extracted.experience_level ? expLabels[extracted.experience_level] || extracted.experience_level : ""}</span>
                   </div>
                   <div className="chip-row">
                     <span className="chip-label">研究范式</span>
-                    <span className="chip value">{paradigmLabels[extracted.paradigm_preference] || extracted.paradigm_preference}</span>
+                    <span className="chip value">{extracted.paradigm_preference ? paradigmLabels[extracted.paradigm_preference] || extracted.paradigm_preference : ""}</span>
                   </div>
                   <div className="chip-row">
                     <span className="chip-label">常用场景</span>
-                    <span className="chip value">{scenarioLabels[extracted.scenario_preference] || extracted.scenario_preference}</span>
+                    <span className="chip value">{extracted.scenario_preference ? scenarioLabels[extracted.scenario_preference] || extracted.scenario_preference : ""}</span>
                   </div>
                   {extracted.mbti && (
                     <div className="chip-row">

@@ -21,7 +21,7 @@ from app.models.survey import SurveyProject, UserProfile
 from app.middleware.request_context import get_request_id
 from app.providers.contracts import ProviderError, ProviderRegistry
 from app.schemas.open_api import OpenAPIChatRequest, OpenAPIChatResponse, OpenAPIUsage
-from app.services.open_api_usage import check_quota, record_usage
+from app.services.open_api_usage import record_usage, reserve_usage
 
 router = APIRouter(prefix="/open-api", tags=["open-api"])
 logger = logging.getLogger(__name__)
@@ -81,7 +81,6 @@ async def create_chat_completion(
         if result.scalar_one_or_none() is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
-    _, used_tokens = await check_quota(db, profile.id, payload.max_tokens)
     try:
         provider = registry.get(payload.provider)
     except ProviderError as exc:
@@ -91,6 +90,14 @@ async def create_chat_completion(
         ) from exc
     selected_model = payload.model or provider.manifest.default_model
     request_id = get_request_id()
+    reservation, used_tokens = await reserve_usage(
+        db,
+        profile_id=profile.id,
+        request_id=request_id,
+        provider=provider.manifest.id,
+        model=selected_model,
+        requested_tokens=payload.max_tokens,
+    )
     try:
         result = await _chat_with_bounded_retry(provider, payload)
     except ProviderError as exc:
@@ -103,6 +110,7 @@ async def create_chat_completion(
                 model=selected_model,
                 success=False,
                 error_category=exc.category,
+                record_id=reservation.id,
             )
         except Exception:
             logger.exception("Failed to record Open API provider failure")
@@ -122,6 +130,7 @@ async def create_chat_completion(
         prompt_tokens=result.usage.prompt_tokens,
         completion_tokens=result.usage.completion_tokens,
         total_tokens=result.usage.total_tokens,
+        record_id=reservation.id,
     )
 
     return OpenAPIChatResponse(

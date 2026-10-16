@@ -279,7 +279,7 @@ def _parse_json(content: str) -> dict:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        logger.warning("Failed to parse field note JSON, raw: %.200s", text)
+        logger.warning("Failed to parse field note JSON, chars=%s", len(text))
         return {}
 
 

@@ -76,6 +76,46 @@ class TestAIServiceChat:
             with pytest.raises(Exception, match="Server Error"):
                 await svc.chat([{"role": "user", "content": "Hi"}])
 
+    @pytest.mark.asyncio
+    async def test_task_token_ceiling_does_not_expand_small_request(self, svc):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": "ok"}}],
+            "usage": {},
+        }
+
+        with patch("httpx.AsyncClient.post") as mock_post:
+            mock_post.return_value = mock_resp
+            await svc.chat(
+                [{"role": "user", "content": "Hi"}],
+                task="hints",
+                max_tokens=8192,
+            )
+        assert mock_post.call_args.kwargs["json"]["max_tokens"] == 1024
+
+    @pytest.mark.asyncio
+    async def test_image_uses_routed_provider_credentials(self):
+        svc = AIService(
+            api_key="",
+            base_url="https://primary.example/v1",
+            fallback_qwen_key="qwen-test",
+            fallback_qwen_base="https://qwen.example/v1",
+        )
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": "ok"}}],
+        }
+
+        with patch("httpx.AsyncClient.post") as mock_post:
+            mock_post.return_value = mock_resp
+            result = await svc.chat_with_image("describe", "ZmFrZQ==")
+
+        assert result == "ok"
+        assert mock_post.call_args.args[0] == "https://qwen.example/v1/chat/completions"
+        assert mock_post.call_args.kwargs["headers"] == {"Authorization": "Bearer qwen-test"}
+
 
 class TestAIServiceStreaming:
     """Test the chat_stream() method."""

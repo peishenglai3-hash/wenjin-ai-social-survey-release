@@ -229,7 +229,7 @@ class QwenRealtimeASR:
                     sentences.append(last_text)
                 break
             elif msg_type == "error":
-                logger.error(f"ASR callback error: {payload}")
+                logger.error("ASR callback error: payload_type=%s", type(payload).__name__)
             elif msg_type == "event":
                 output = payload.get("output", {})
                 sentence = output.get("sentence", {})

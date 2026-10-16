@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
+import json
 from collections.abc import Mapping
+from typing import Any
 
 from fastapi import HTTPException, status
 
@@ -11,6 +13,9 @@ from fastapi import HTTPException, status
 MAX_SKILL_PROMPT_CHARS = 20_000
 MAX_SKILL_CONTEXT_KEYS = 32
 MAX_SKILL_CONTEXT_VALUE_CHARS = 4_000
+MAX_SKILL_PAYLOAD_BYTES = 100_000
+MAX_SKILL_PAYLOAD_DEPTH = 8
+MAX_SKILL_PAYLOAD_NODES = 512
 
 _SECRET_PATTERN = re.compile(
     r"(?i)(?:api[_-]?key|secret|password|authorization)\s*[:=]\s*\S+|"
@@ -20,6 +25,81 @@ _EXECUTABLE_MARKER = re.compile(
     r"(?i)__import__\s*\(|subprocess\.|os\.system\s*\(|eval\s*\(|exec\s*\(|<script\b"
 )
 _CONTEXT_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$")
+_BLOCKED_PAYLOAD_KEYS = frozenset(
+    {
+        "api_key",
+        "apikey",
+        "authorization",
+        "access_token",
+        "refresh_token",
+        "client_secret",
+        "private_key",
+        "base_url",
+        "endpoint",
+        "shell_command",
+        "command",
+        "exec",
+        "tool_calls",
+        "function_call",
+    }
+)
+
+
+def validate_skill_payload(payload: Any) -> None:
+    """Bound skill execution input before it reaches prompts or providers.
+
+    Built-in skills are prompt/data adapters, not executable plugins.  This
+    boundary therefore rejects credential/control-plane fields and limits
+    recursive JSON shape without inspecting or storing the research content.
+    """
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=422, detail="Skill payload must be an object")
+    try:
+        encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="Skill payload must be JSON data") from exc
+    if len(encoded.encode("utf-8")) > MAX_SKILL_PAYLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Skill payload exceeds the size limit")
+
+    nodes = 0
+
+    def walk(value: Any, depth: int) -> None:
+        nonlocal nodes
+        nodes += 1
+        if nodes > MAX_SKILL_PAYLOAD_NODES:
+            raise HTTPException(status_code=422, detail="Skill payload is too complex")
+        if depth > MAX_SKILL_PAYLOAD_DEPTH:
+            raise HTTPException(status_code=422, detail="Skill payload nesting is too deep")
+        if isinstance(value, dict):
+            if len(value) > MAX_SKILL_CONTEXT_KEYS * 2:
+                raise HTTPException(status_code=422, detail="Too many skill payload fields")
+            for key, child in value.items():
+                if not isinstance(key, str):
+                    raise HTTPException(status_code=422, detail="Skill payload keys must be strings")
+                normalized = key.casefold().replace("-", "_")
+                if normalized in _BLOCKED_PAYLOAD_KEYS:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"Skill payload field '{key}' is not accepted",
+                    )
+                walk(child, depth + 1)
+        elif isinstance(value, list):
+            if len(value) > 128:
+                raise HTTPException(status_code=422, detail="Skill payload list is too long")
+            for child in value:
+                walk(child, depth + 1)
+        elif isinstance(value, str):
+            if len(value) > MAX_SKILL_PAYLOAD_BYTES:
+                raise HTTPException(status_code=413, detail="Skill payload text is too long")
+            if _SECRET_PATTERN.search(value):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Skill payload contains a credential-like value",
+                )
+        elif value is not None and not isinstance(value, (bool, int, float)):
+            raise HTTPException(status_code=422, detail="Skill payload contains unsupported data")
+
+    walk(payload, 0)
 
 
 def validate_public_skill_text(value: str | None, *, field: str, max_chars: int) -> None:

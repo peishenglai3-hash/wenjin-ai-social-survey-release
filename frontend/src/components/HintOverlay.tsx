@@ -7,14 +7,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-
-export interface Hint {
-  id: string;
-  text: string;
-  category?: "follow_up" | "rapport" | "redirect" | "probe" | "wrap_up" | "general";
-  urgency?: "low" | "medium" | "high";
-  timestamp: number;
-}
+import type { Hint } from "../types/hints";
 
 interface HintOverlayProps {
   hints: Hint[];
@@ -22,7 +15,6 @@ interface HintOverlayProps {
   onDismiss?: (id: string) => void;
   maxVisible?: number;
 }
-
 const CAT_ICONS: Record<string, string> = {
   follow_up: "🔍", rapport: "🤝", redirect: "↩️", probe: "🎯", wrap_up: "🏁", general: "💡",
 };
@@ -116,15 +108,4 @@ export default function HintOverlay({
       ))}
     </div>
   );
-}
-
-/** Parse backend hint strings into Hint objects */
-export function parseHints(raw: string[], category?: string): Hint[] {
-  return raw.map((text, i) => ({
-    id: `hint_${Date.now()}_${i}`,
-    text,
-    category: (category || "general") as Hint["category"],
-    urgency: "medium" as const,
-    timestamp: Date.now(),
-  }));
 }

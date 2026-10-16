@@ -71,7 +71,7 @@ export default function SkillMarket() {
   }, [category, skillType, sort, search, page]);
 
   useEffect(() => {
-    fetchSkills();
+    void Promise.resolve().then(fetchSkills);
   }, [fetchSkills]);
 
   function updateParam(key: string, value: string) {

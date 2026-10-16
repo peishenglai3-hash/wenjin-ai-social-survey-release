@@ -1,7 +1,7 @@
 import { useState } from "react";
 import api from "../api/client";
 import { streamAI } from "../api/stream";
-import { useApp } from "../context/AppContext";
+import { useApp } from "../hooks/useApp";
 import QuickNav from "../components/QuickNav";
 
 interface FeasibilityScores {

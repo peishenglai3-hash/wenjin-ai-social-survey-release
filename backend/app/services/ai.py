@@ -67,6 +67,7 @@ class AIService:
         base_url: str,
         model: str = "deepseek-v4-pro",
         *,
+        default_user_id: int | None = None,
         realtime_api_key: str = "",
         realtime_base_url: str = "",
         realtime_model: str = "",
@@ -81,6 +82,7 @@ class AIService:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
+        self.default_user_id = default_user_id
         self.realtime_api_key = realtime_api_key
         self.realtime_base_url = realtime_base_url.rstrip("/") if realtime_base_url else ""
         self.realtime_model = realtime_model
@@ -133,6 +135,14 @@ class AIService:
     def _max_tokens_for(self, task: str) -> int:
         return TASK_MAX_TOKENS.get(task, 4096)
 
+    def _effective_user_id(self, user_id: int | None) -> int | None:
+        """Use the request-scoped profile when callers omit an explicit id."""
+        return self.default_user_id if user_id is None else user_id
+
+    def _bounded_max_tokens(self, task: str, requested: int) -> int:
+        """Apply the per-task ceiling without silently expanding requests."""
+        return min(max(1, int(requested)), self._max_tokens_for(task) if task else 4096)
+
     def _check_cost_limit(self, user_id: int | None) -> None:
         """Raise 429 if user exceeds daily or monthly token budget."""
         if not settings.cost_limit_enabled or user_id is None:
@@ -173,8 +183,8 @@ class AIService:
         except ProviderNotConfiguredError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         model = model or routed_model
-        task_max = self._max_tokens_for(task) if task else 4096
-        max_tokens = max(max_tokens, task_max)
+        max_tokens = self._bounded_max_tokens(task, max_tokens)
+        user_id = self._effective_user_id(user_id)
         self._check_cost_limit(user_id)
         t0 = time.time()
         try:
@@ -236,8 +246,8 @@ class AIService:
         except ProviderNotConfiguredError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         model = model or routed_model
-        task_max = self._max_tokens_for(task) if task else 4096
-        max_tokens = max(max_tokens, task_max)
+        max_tokens = self._bounded_max_tokens(task, max_tokens)
+        user_id = self._effective_user_id(user_id)
         self._check_cost_limit(user_id)
         t0 = time.time()
         last_usage_chunk: dict = {}
@@ -315,12 +325,14 @@ class AIService:
         except ProviderNotConfiguredError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         model = model or routed_model
+        user_id = self._effective_user_id(user_id)
+        max_tokens = self._bounded_max_tokens("image", max_tokens)
         self._check_cost_limit(user_id)
         try:
             async with AsyncClient(timeout=120) as client:
                 resp = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    f"{base_url}/chat/completions",
+                    headers={"Authorization": f"Bearer {api_key}"},
                     json={
                         "model": model,
                         "messages": [
@@ -341,7 +353,7 @@ class AIService:
                 )
                 if resp.status_code == 400:
                     raise VisionNotSupportedError(
-                        f"Provider at {self.base_url} does not support image input. "
+                        "The configured AI provider does not support image input. "
                         "Falling back to text-only analysis."
                     )
                 resp.raise_for_status()
@@ -353,7 +365,7 @@ class AIService:
         except Exception as e:
             if "400" in str(e) or "image_url" in str(e).lower():
                 raise VisionNotSupportedError(
-                    f"Image analysis not supported by current AI provider ({self.base_url}). "
+                    "Image analysis is not supported by the configured AI provider. "
                     "Configure a vision-capable model or use text descriptions."
                 )
             raise

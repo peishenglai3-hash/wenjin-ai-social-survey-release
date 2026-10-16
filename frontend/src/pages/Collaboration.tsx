@@ -6,7 +6,7 @@ import {
   listResearchArtifacts,
 } from "../api/collaboration";
 import type { CollaborationMember, ResearchArtifact } from "../api/collaboration";
-import { useApp } from "../context/AppContext";
+import { useApp } from "../hooks/useApp";
 
 const artifactKinds = [
   ["research_plan", "研究计划"],

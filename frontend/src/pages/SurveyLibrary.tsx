@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import api from "../api/client";
-import { useApp } from "../context/AppContext";
+import { useApp } from "../hooks/useApp";
 
 interface ProjectItem {
   id: number;
@@ -14,10 +14,14 @@ interface ProjectItem {
 }
 
 interface ProjectDetail {
-  project: any;
-  sessions: any[];
-  analyses: any[];
-  exports: any[];
+  project: ProjectItem & {
+    topic_argumentation?: string;
+    questionnaire_design?: string;
+    methodology_guidance?: string;
+  };
+  sessions: Array<{ id: number; notes?: string; summary_text?: string; created_at: string }>;
+  analyses: Array<{ id: number; content: string }>;
+  exports: Array<{ id: number; format: string; content: string }>;
 }
 
 interface KnowledgeCardItem {
@@ -65,18 +69,20 @@ export default function SurveyLibrary() {
     api.get("/library").then((r) => setProjects(r.data.projects || [])).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
-  const fetchCards = async () => {
+  const fetchCards = useCallback(async () => {
     setCardsLoading(true);
     try {
-      const params: Record<string, any> = { profile_id: profile?.id || 1 };
+      const params: Record<string, string | number> = { profile_id: profile?.id || 1 };
       if (cardCategory) params.category = cardCategory;
       const r = await api.get("/knowledge/cards", { params });
       setCards(r.data.cards || []);
     } catch { /* offline */ }
     finally { setCardsLoading(false); }
-  };
+  }, [cardCategory, profile]);
 
-  useEffect(() => { if (activeTab === "knowledge") fetchCards(); }, [activeTab, cardCategory]);
+  useEffect(() => {
+    if (activeTab === "knowledge") void Promise.resolve().then(fetchCards);
+  }, [activeTab, fetchCards]);
 
   const extractCards = async () => {
     if (!confirm("AI将分析所有已完成的项目，从中提取可复用的方法论知识卡片。这个过程可能需要几秒到几十秒。继续？")) return;
@@ -243,7 +249,7 @@ export default function SurveyLibrary() {
           {selected.sessions.length > 0 && (
             <details style={{ marginTop: 12 }}>
               <summary style={{ fontWeight: 600, cursor: "pointer" }}>田野会话 ({selected.sessions.length}次)</summary>
-              {selected.sessions.map((s: any) => (
+              {selected.sessions.map((s) => (
                 <div key={s.id} style={{ marginTop: 8, padding: 12, background: "var(--bg)", borderRadius: 8 }}>
                   {s.notes && <p><strong>笔记:</strong> {s.notes.slice(0, 200)}</p>}
                   {s.summary_text && <div className="md-content" style={{ marginTop: 8 }}>{s.summary_text.slice(0, 500)}</div>}
@@ -256,7 +262,7 @@ export default function SurveyLibrary() {
           {selected.analyses.length > 0 && (
             <details style={{ marginTop: 12 }}>
               <summary style={{ fontWeight: 600, cursor: "pointer" }}>分析结果 ({selected.analyses.length}次)</summary>
-              {selected.analyses.map((a: any) => (
+              {selected.analyses.map((a) => (
                 <div key={a.id} className="md-content" style={{ marginTop: 8 }}>{a.content.slice(0, 500)}...</div>
               ))}
             </details>
@@ -265,7 +271,7 @@ export default function SurveyLibrary() {
           {selected.exports.length > 0 && (
             <details style={{ marginTop: 12 }}>
               <summary style={{ fontWeight: 600, cursor: "pointer" }}>导出文档 ({selected.exports.length}份)</summary>
-              {selected.exports.map((e: any) => (
+              {selected.exports.map((e) => (
                 <div key={e.id} style={{ marginTop: 8 }}>
                   <span className="badge">{e.format}</span>
                   <div className="md-content" style={{ marginTop: 4 }}>{e.content.slice(0, 500)}...</div>

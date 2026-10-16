@@ -1,6 +1,6 @@
 # Wenjin 发布候选报告（2026-10-16）
 
-状态：`release candidate`，不是公开发布批准。
+状态：`release candidate`，等待最终前端质量门禁、部署环境证据和发布者复核，不等同于已经公开发布。
 
 当前分支：`codex/wenjin-evolution-v2`  
 本次候选审计基于 `6e6a6ad` 之后的本地工作树；最终审计提交哈希以本地 `git log` 为准。
@@ -37,6 +37,7 @@
 - request ID、通用错误边界、provider fail-closed、CORS/代理边界和多组对象归属校验。
 - refresh token 改为 HttpOnly Cookie + 服务端摘要，浏览器 access token 仅内存保存，响应不返回 refresh token 原文。
 - 上传大小/签名/归属/保留元数据、URL/SSRF 和实时 WebSocket bearer 子协议边界。
+- ORCID redirect 仅接受同源相对路径；provider 响应体、Redis URL、字段笔记和文献响应不会进入日志；CORS 方法/请求头已收窄，反向代理模板增加 HSTS/CSP。
 - 修复实时情绪/时间线的跨用户模块级状态泄漏；实时 pipeline、情绪 tracker 和时间线存储均按连接/用户隔离，并增加帧大小、消息速率和文本上限。
 - SMS 未配置或 provider 不可用时 fail-closed，不再生成、接受或记录可复用验证码；Open API 输入、分析属性、音频/转录和批量边界均有上限。
 - CI 已包含 `pip check`、compile、Alembic upgrade/check、diff whitespace 和高置信度凭据扫描。
@@ -57,6 +58,8 @@
 
 - OpenAI-compatible、DashScope 和 local fake provider contract；provider key 只在部署者后端环境配置。
 - scope/项目归属、滚动配额、有限 retry、metadata-only usage records、OpenAPI snapshot、标准库示例和 prompt-only 扩展边界。
+- Open API 配额在 profile 行级锁/事务内预留请求和 token，成功/失败回写同一条记录；异常中断的预留十分钟后释放 token，保留请求计数。
+- 普通受保护 HTTP 路由生成 request-scoped AI service，成本熔断器默认绑定当前 profile；技能执行 payload 具有大小、深度、复杂度、凭据字段和控制字段边界。
 
 ## 4. 实测验证
 
@@ -64,7 +67,7 @@
 
 | 检查 | 结果 | 说明 |
 | --- | --- | --- |
-| 后端全量 | 271 passed | 54.28s，2 个既有 Pydantic deprecation warnings |
+| 后端全量 | 284 passed | 53.82s，2 个既有 Pydantic deprecation warnings |
 | 知识准入专项 | 12 passed | 包含未知字段、越界、路径、注入标记、双语 metadata 和 runtime 只读 manifest |
 | 后端 compile | passed | `python -m compileall -q app` |
 | 依赖图 | passed | `pip check` 无 broken requirements |
@@ -73,7 +76,7 @@
 | 前端类型/单测 | passed | `tsc --noEmit`，Vitest 4 files / 17 tests |
 | 前端 build | passed with warning | Vite build 成功；最大压缩 vendor chunk 约 1.29 MB |
 | 新协作文件 lint | passed | 协作页面/API/config 定向 ESLint 通过 |
-| 全前端 lint | not passed | 97 errors、16 warnings；主要是历史 `any`、effect 规则和 Fast Refresh 规则，不能假装为绿色 |
+| 全前端 lint | passed | 0 errors、0 warnings；未关闭规则，未删除稳定功能 |
 | npm 依赖审计 | passed | `npm audit --offline --audit-level=high`：0 vulnerabilities |
 | 前端窄屏审计 | passed with boundary | 320px/768px 视口截图通过；后端未联机，API 404 不能当作集成通过 |
 | 当前树凭据扫描 | passed | 当前树及候选分支可达提交的高置信度模式未命中；不替代历史扫描和供应商侧轮换 |
@@ -85,9 +88,8 @@
 ## 5. 仍需项目创建者审阅的阻塞项
 
 1. 知识候选的版权/再分发权、翻译质量、场域适配和伦理边界仍需人工批准；在此之前不能生成 `approved` manifest，也不能把原训练书籍/切片恢复到公开树。
-2. 全前端 lint 尚未通过；应在独立质量切片中治理历史问题，不能通过关闭规则或删测试放行。
-3. PostgreSQL + Redis、Docker Compose、真实浏览器/PWA、生产 HTTPS/CORS/CSP/HSTS 和上传保留清理还没有本机成功证据。
-4. 多实例部署下的配额原子性、若干非实时 AI 路由的统一 `user_id`/成本熔断、完整数据导出/删除保留策略、DNS rebinding/SSRF 防护、依赖 lock/audit/SBOM 仍需部署级复核。
+2. PostgreSQL + Redis、Docker Compose、真实浏览器/PWA、生产 HTTPS/CORS/CSP/HSTS 和上传保留清理还没有本机成功证据。
+3. Open API 配额代码已具备事务预留和 profile 锁，但仍需 PostgreSQL 多实例压测证据；后台直接创建 AI service 的异步任务仍需补充用户归属；完整数据导出/删除保留策略、DNS rebinding/SSRF 防护、依赖 lock/audit/SBOM 仍需部署级复核。
 5. 服务端 BYOK 已实现，但它仍是部署者后端环境配置，不是让浏览器把 provider key 直接交给公共 API；ORCID/技能市场的外部审查和完整 typed SDK、webhook、公共 streaming 仍不属于本候选完成范围。
 
 ## 6. 发布建议与回滚

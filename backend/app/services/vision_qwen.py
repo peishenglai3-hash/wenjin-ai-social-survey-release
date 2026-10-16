@@ -105,10 +105,13 @@ class QwenVisionService:
             )
 
             if resp.status_code != 200:
-                error_detail = resp.text
-                logger.error(f"Qwen Vision API error ({resp.status_code}): {error_detail}")
-                logger.error(f"Request payload model={self.model}, image_len={len(image_base64)}")
-                raise RuntimeError(f"Qwen Vision API returned {resp.status_code}: {error_detail[:500]}")
+                logger.error(
+                    "Qwen Vision API error: status=%s model=%s image_len=%s",
+                    resp.status_code,
+                    self.model,
+                    len(image_base64),
+                )
+                raise RuntimeError(f"Qwen Vision API returned {resp.status_code}")
 
             data = resp.json()
             try:
@@ -131,11 +134,11 @@ class QwenVisionService:
                 text = output.get("text", "")
                 if text:
                     return text
-                logger.warning(f"Unexpected Qwen VL response structure: {data}")
-                return str(data)
+                logger.warning("Unexpected Qwen VL response structure")
+                return ""
             except Exception as e:
-                logger.exception(f"Failed to parse Qwen VL response: {data}")
-                raise RuntimeError(f"Failed to parse Qwen VL response: {e}")
+                logger.exception("Failed to parse Qwen VL response structure")
+                raise RuntimeError("Failed to parse Qwen VL response") from e
 
     async def analyze_image_stream(
         self,

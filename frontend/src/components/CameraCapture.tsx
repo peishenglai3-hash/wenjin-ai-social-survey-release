@@ -20,6 +20,18 @@
  */
 
 import { useEffect, useRef, useCallback, useState } from "react";
+import { getErrorMessage, getErrorName } from "../utils/errors";
+
+interface FaceMeshResults {
+  multiFaceLandmarks?: Array<Array<{ x: number; y: number; z?: number }>>;
+}
+
+interface FaceMeshLike {
+  setOptions(options: Record<string, boolean | number>): void;
+  onResults(callback: (results: FaceMeshResults) => void): void;
+  send(input: { image: HTMLVideoElement }): Promise<void>;
+  close(): void;
+}
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -118,7 +130,7 @@ export default function CameraCapture({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const faceMeshRef = useRef<any>(null);
+  const faceMeshRef = useRef<FaceMeshLike | null>(null);
   const animRef = useRef<number>(0);
   const lastSignalRef = useRef<number>(0);
   const [status, setStatus] = useState<"idle" | "loading" | "active" | "error">("idle");
@@ -193,7 +205,7 @@ export default function CameraCapture({
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
       if (animRef.current) cancelAnimationFrame(animRef.current);
-      setStatus("idle"); return;
+      return;
     }
     let cancelled = false;
 
@@ -214,8 +226,9 @@ export default function CameraCapture({
           locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
         });
         faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: false, minDetectionConfidence: 0.7, minTrackingConfidence: 0.5 });
-        faceMesh.onResults((results: any) => {
-          if (results.multiFaceLandmarks?.length > 0) processLandmarks(results.multiFaceLandmarks[0]);
+        faceMesh.onResults((results: FaceMeshResults) => {
+          const landmarks = results.multiFaceLandmarks;
+          if (landmarks && landmarks.length > 0) processLandmarks(landmarks[0]);
         });
         faceMeshRef.current = faceMesh;
         setStatus("active");
@@ -226,9 +239,10 @@ export default function CameraCapture({
           animRef.current = requestAnimationFrame(loop);
         };
         loop();
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (cancelled) return;
-        setErrorMsg(err.name === "NotAllowedError" ? "摄像头权限被拒绝" : err.name === "NotFoundError" ? "未检测到摄像头" : `初始化失败: ${err.message}`);
+        const errorName = getErrorName(err);
+        setErrorMsg(errorName === "NotAllowedError" ? "摄像头权限被拒绝" : errorName === "NotFoundError" ? "未检测到摄像头" : `初始化失败: ${getErrorMessage(err, "未知错误")}`);
         setStatus("error");
       }
     }
@@ -241,21 +255,23 @@ export default function CameraCapture({
       faceMeshRef.current?.close();
       faceMeshRef.current = null;
     };
-  }, [enabled, width, height, fps, processLandmarks]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [enabled, width, height, fps, processLandmarks]);
+
+  const visibleStatus = enabled ? status : "idle";
 
   return (
     <div style={{ position: "relative", width, borderRadius: 10, background: "#0F172A", overflow: "hidden" }}>
       <div style={{ position: "absolute", top: 8, left: 8, zIndex: 10, display: "flex", gap: 6, alignItems: "center" }}>
         <span style={{ padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 600, color: "#fff", background: status === "active" ? "#10B981" : status === "loading" ? "#F59E0B" : status === "error" ? "#EF4444" : "#6B7280" }}>
-          {status === "active" ? "● 实时" : status === "loading" ? "◌ 加载" : status === "error" ? "✕ 错误" : "○ 待机"}
+          {visibleStatus === "active" ? "● 实时" : visibleStatus === "loading" ? "◌ 加载" : visibleStatus === "error" ? "✕ 错误" : "○ 待机"}
         </span>
-        {status === "active" && <span style={{ padding: "2px 8px", borderRadius: 4, fontSize: 10, background: "rgba(255,255,255,0.15)", color: "#E2E8F0" }}>{expression}</span>}
+        {visibleStatus === "active" && <span style={{ padding: "2px 8px", borderRadius: 4, fontSize: 10, background: "rgba(255,255,255,0.15)", color: "#E2E8F0" }}>{expression}</span>}
       </div>
       <video ref={videoRef} style={{ display: "none" }} playsInline muted />
       <canvas ref={canvasRef} width={width} height={height} style={{ width: "100%", aspectRatio: `${width}/${height}`, transform: mirrored ? "scaleX(-1)" : "none", borderRadius: 10 }} />
       <div style={{ position: "absolute", bottom: 6, right: 8, zIndex: 10, fontSize: 9, color: "rgba(255,255,255,0.4)" }}>🔒 本地推理 · 不上传视频</div>
-      {status === "error" && <div style={{ position: "absolute", inset: 0, zIndex: 20, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.7)", borderRadius: 10 }}><div style={{ textAlign: "center", color: "#FCA5A5", padding: 20, fontSize: 12 }}><div style={{ fontSize: 24, marginBottom: 8 }}>📷✕</div>{errorMsg}</div></div>}
-      {status === "loading" && <div style={{ position: "absolute", inset: 0, zIndex: 20, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)", borderRadius: 10 }}><div style={{ textAlign: "center", color: "#E2E8F0", fontSize: 13 }}><div style={{ fontSize: 24, marginBottom: 8 }}>⏳</div>加载面部识别模型...</div></div>}
+      {visibleStatus === "error" && <div style={{ position: "absolute", inset: 0, zIndex: 20, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.7)", borderRadius: 10 }}><div style={{ textAlign: "center", color: "#FCA5A5", padding: 20, fontSize: 12 }}><div style={{ fontSize: 24, marginBottom: 8 }}>📷✕</div>{errorMsg}</div></div>}
+      {visibleStatus === "loading" && <div style={{ position: "absolute", inset: 0, zIndex: 20, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)", borderRadius: 10 }}><div style={{ textAlign: "center", color: "#E2E8F0", fontSize: 13 }}><div style={{ fontSize: 24, marginBottom: 8 }}>⏳</div>加载面部识别模型...</div></div>}
     </div>
   );
 }

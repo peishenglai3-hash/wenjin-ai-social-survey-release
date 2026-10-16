@@ -304,8 +304,8 @@ class LiteratureService:
                             paper.language = "zh"
                         papers.append(paper)
                 else:
-                    body = await resp.text()
-                    logger.warning("OpenAlex returned %d: %s", resp.status, body[:200])
+                    await resp.read()
+                    logger.warning("OpenAlex returned HTTP %d", resp.status)
         except Exception as e:
             logger.warning("OpenAlex search failed: %s", e)
 

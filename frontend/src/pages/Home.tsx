@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useApp } from "../context/AppContext";
+import { useApp } from "../hooks/useApp";
 import config from "../config";
 import { getAuthHeaders } from "../utils/authFetch";
 
@@ -55,7 +55,7 @@ export default function Home() {
 
   useEffect(() => {
     const pid = profile?.id;
-    if (!pid) { setLoading(false); return; }
+    if (!pid) return;
     fetch(`${config.apiBaseUrl}/api/v1/dashboard/${pid}`, { headers: getAuthHeaders() })
       .then(r => r.json())
       .then(d => { setDash(d); setLoading(false); })
@@ -63,6 +63,7 @@ export default function Home() {
   }, [profile?.id]);
 
   const needsSetup = !profile?.id;
+  const effectiveLoading = needsSetup ? false : loading;
 
   const greetings: Record<string, string> = {
     academic: "以学术之眼，观社会之微",
@@ -79,10 +80,10 @@ export default function Home() {
       <div className="dashboard-hero">
         <div className="dashboard-hero-content">
           <h1 className="dashboard-hero-title">
-            {loading ? "加载中..." : needsSetup ? "欢迎使用 AI 社会调查工作台" : `你好，${ROLE_LABELS[profile.role] || "研究者"}`}
+            {effectiveLoading ? "加载中..." : needsSetup ? "欢迎使用 AI 社会调查工作台" : `你好，${ROLE_LABELS[profile.role] || "研究者"}`}
           </h1>
           <p className="dashboard-hero-quote">{heroQuote}</p>
-          {!loading && !needsSetup && dash?.profile && (
+          {!effectiveLoading && !needsSetup && dash?.profile && (
             <div className="dashboard-hero-meta">
               <span className="hero-tag">{EXP_LABELS[dash.profile.experience_level] || "新手"}</span>
               <span className="hero-tag">{PARADIGM_LABELS[dash.profile.paradigm_preference] || "质性"}</span>

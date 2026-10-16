@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef } from "react";
 import api from "../api/client";
 import { streamAI } from "../api/stream";
-import { useApp } from "../context/AppContext";
+import { useApp } from "../hooks/useApp";
 import { validateFile } from "../utils/uploadValidation";
 import QuickNav from "../components/QuickNav";
 

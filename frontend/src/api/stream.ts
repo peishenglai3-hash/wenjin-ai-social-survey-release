@@ -3,10 +3,11 @@
 
 import config from "../config";
 import { getAccessToken } from "./client";
+import { getErrorMessage, getErrorName, isRecord } from "../utils/errors";
 
 export async function streamAI(
   endpoint: string,
-  body: Record<string, any>,
+  body: Record<string, unknown>,
   onToken: (token: string) => void,
   onDone: () => void,
   onError: (err: string) => void,
@@ -62,7 +63,7 @@ export async function streamAI(
         }
         try {
           const parsed = JSON.parse(data);
-          if (parsed.token) {
+          if (isRecord(parsed) && typeof parsed.token === "string") {
             onToken(parsed.token);
           }
         } catch {
@@ -72,11 +73,11 @@ export async function streamAI(
     }
 
     onDone();
-  } catch (err: any) {
-    if (err.name === "AbortError") {
+  } catch (err: unknown) {
+    if (getErrorName(err) === "AbortError") {
       // Request was intentionally cancelled — don't report as error
       return;
     }
-    onError(err.message || "网络错误");
+    onError(getErrorMessage(err, "网络错误"));
   }
 }

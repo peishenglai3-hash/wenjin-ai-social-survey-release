@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import api from "../api/client";
-import { DIM_LABELS_MAP } from "./SpectrumSliders";
+import { DIM_LABELS_MAP } from "../types/spectrum";
 
 interface EvolutionEntry {
   id: number; dimension: string; direction: number; confidence: number;
@@ -27,7 +27,7 @@ export default function EvolutionTimeline({ profileId, className = "" }: { profi
     finally { setLoading(false); }
   }, [profileId, selDim]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => { void Promise.resolve().then(fetch); }, [fetch]);
 
   if (loading) return (
     <div className={`evolution-card ${className}`}>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import api from "../api/client";
-import { useApp } from "../context/AppContext";
+import { useApp } from "../hooks/useApp";
 import SpectrumSliders, { type SpectrumDim, type SpectrumGroup } from "../components/SpectrumSliders";
 
 interface SettingsOptions {
@@ -10,6 +10,8 @@ interface SettingsOptions {
   default_export_format: { id: string; label: string; theme: string }[];
   auto_save_interval: { id: string; label: string }[];
 }
+
+type SettingValue = string | number | boolean | null;
 
 type TabId = "ai" | "ui" | "defaults" | "privacy";
 
@@ -37,7 +39,7 @@ export default function Settings() {
   const [spectrumDims, setSpectrumDims] = useState<SpectrumDim[]>([]);
   const [options, setOptions] = useState<SettingsOptions | null>(null);
   const [spectrum, setSpectrum] = useState<Record<string, number>>({});
-  const [settings, setSettings] = useState<Record<string, any>>({});
+  const [settings, setSettings] = useState<Record<string, SettingValue>>({});
 
   // Load defaults metadata + current settings
   useEffect(() => {
@@ -91,7 +93,7 @@ export default function Settings() {
     } finally { setSaving(false); }
   }, [profile?.id, spectrum]);
 
-  const saveSettings = useCallback(async (updated: Record<string, any>) => {
+  const saveSettings = useCallback(async (updated: Record<string, SettingValue>) => {
     if (!profile?.id) { showMsg("error", "请先保存身份档案"); return; }
     setSaving(true);
     try {
@@ -104,9 +106,9 @@ export default function Settings() {
     } catch {
       showMsg("error", "保存失败");
     } finally { setSaving(false); }
-  }, [profile?.id, profile, setProfile]);
+  }, [profile, setProfile]);
 
-  const updateSetting = (key: string, value: any) => {
+  const updateSetting = (key: string, value: SettingValue) => {
     const updated = { ...settings, [key]: value };
     setSettings(updated);
     saveSettings({ [key]: value });
@@ -228,7 +230,7 @@ export default function Settings() {
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 11 }}>严谨 0.3</span>
                 <input type="range" min={0.3} max={0.8} step={0.05}
-                  value={settings.ai_temperature ?? 0.5}
+                  value={typeof settings.ai_temperature === "number" ? settings.ai_temperature : 0.5}
                   onChange={(e) => updateSetting("ai_temperature", parseFloat(e.target.value))}
                   className="spectrum-slider-input" />
                 <span style={{ fontSize: 11 }}>创意 0.8</span>
@@ -303,7 +305,7 @@ export default function Settings() {
             </p>
             <div className="form-group">
               <label>默认导出格式</label>
-              <select value={settings.default_export_format || "report"}
+              <select value={typeof settings.default_export_format === "string" ? settings.default_export_format : "report"}
                 onChange={(e) => updateSetting("default_export_format", e.target.value)}>
                 {(options?.default_export_format || []).map((opt) => (
                   <option key={opt.id} value={opt.id}>
@@ -314,7 +316,7 @@ export default function Settings() {
             </div>
             <div className="form-group">
               <label>自动保存间隔</label>
-              <select value={settings.auto_save_interval || "60s"}
+              <select value={typeof settings.auto_save_interval === "string" ? settings.auto_save_interval : "60s"}
                 onChange={(e) => updateSetting("auto_save_interval", e.target.value)}>
                 {(options?.auto_save_interval || []).map((opt) => (
                   <option key={opt.id} value={opt.id}>{opt.label}</option>

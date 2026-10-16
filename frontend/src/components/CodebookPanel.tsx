@@ -3,7 +3,7 @@
  * Tree view + detail editor + AI suggestion panel.
  */
 import { useState, useEffect, useCallback, type FC } from "react";
-import { useApp } from "../context/AppContext";
+import { useApp } from "../hooks/useApp";
 import ConfidenceBadge from "./ConfidenceBadge";
 import {
   fetchCodebook,
@@ -14,6 +14,7 @@ import {
   exportCodebook,
 } from "../api/coding";
 import type { CodebookCode, AISuggestion } from "../types/coding";
+import { getErrorMessage } from "../utils/errors";
 
 const PARADIGMS: Record<string, string> = {
   "": "全部范式",
@@ -76,15 +77,15 @@ const CodebookPanel: FC = () => {
     try {
       const data = await fetchCodebook(projectId, paradigm || undefined);
       setCodes(data.codes || []);
-    } catch (e: any) {
-      setError(e?.response?.data?.detail || e?.message || "加载编码簿失败");
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, "加载编码簿失败"));
     } finally {
       setLoading(false);
     }
   }, [projectId, paradigm]);
 
   useEffect(() => {
-    loadCodes();
+    void Promise.resolve().then(loadCodes);
   }, [loadCodes]);
 
   // ── Tree helpers ──
@@ -131,8 +132,8 @@ const CodebookPanel: FC = () => {
       }
       setEditing(false);
       await loadCodes();
-    } catch (e: any) {
-      setError(e?.response?.data?.detail || e?.message || "保存失败");
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, "保存失败"));
     } finally {
       setSaving(false);
     }
@@ -148,8 +149,8 @@ const CodebookPanel: FC = () => {
         setEditing(false);
       }
       await loadCodes();
-    } catch (e: any) {
-      setError(e?.response?.data?.detail || e?.message || "删除失败");
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, "删除失败"));
     }
   };
 
@@ -167,8 +168,8 @@ const CodebookPanel: FC = () => {
         paradigm || undefined,
       );
       setAiSuggestions(data.suggestions || []);
-    } catch (e: any) {
-      setAiError(e?.response?.data?.detail || e?.message || "AI建议请求失败");
+    } catch (error: unknown) {
+      setAiError(getErrorMessage(error, "AI建议请求失败"));
     } finally {
       setAiLoading(false);
     }
@@ -185,8 +186,8 @@ const CodebookPanel: FC = () => {
       });
       await loadCodes();
       setAiSuggestions((prev) => prev.filter((x) => x.name !== s.name));
-    } catch (e: any) {
-      setError(e?.response?.data?.detail || e?.message || "添加建议编码失败");
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, "添加建议编码失败"));
     }
   };
 
@@ -201,7 +202,7 @@ const CodebookPanel: FC = () => {
       a.download = `codebook_project_${projectId}.md`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (e: any) {
+    } catch {
       setError("导出失败");
     }
   };

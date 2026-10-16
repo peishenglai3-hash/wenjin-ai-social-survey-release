@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useApp } from "../context/AppContext";
+import { useApp } from "../hooks/useApp";
 import config from "../config";
 import { streamAI } from "../api/stream";
 import { getAuthHeaders } from "../utils/authFetch";

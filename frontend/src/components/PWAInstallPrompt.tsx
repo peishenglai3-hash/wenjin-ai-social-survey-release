@@ -20,30 +20,13 @@ interface BeforeInstallPromptEvent extends Event {
 export default function PWAInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
-  const [isWeChat, setIsWeChat] = useState(false);
-  const [isIOS, setIsIOS] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(false);
+  const [isWeChat] = useState(() => navigator.userAgent.toLowerCase().includes("micromessenger"));
+  const [isIOS] = useState(() => /iphone|ipad|ipod/i.test(navigator.userAgent));
+  const [isStandalone, setIsStandalone] = useState(() => window.matchMedia("(display-mode: standalone)").matches);
   const [dismissedWeChat, setDismissedWeChat] = useState(false);
   const [dismissedIOS, setDismissedIOS] = useState(false);
 
   useEffect(() => {
-    const ua = navigator.userAgent.toLowerCase();
-
-    // WeChat / Weixin in-app browser
-    if (ua.includes("micromessenger")) {
-      setIsWeChat(true);
-    }
-
-    // iOS Safari (not Chrome/Firefox on iOS, which still use WebKit)
-    if (/iphone|ipad|ipod/.test(ua)) {
-      setIsIOS(true);
-    }
-
-    // Already running in standalone mode (installed PWA)
-    if (window.matchMedia("(display-mode: standalone)").matches) {
-      setIsStandalone(true);
-    }
-
     // beforeinstallprompt listener (Chrome on Android)
     const handler = (e: Event) => {
       e.preventDefault();

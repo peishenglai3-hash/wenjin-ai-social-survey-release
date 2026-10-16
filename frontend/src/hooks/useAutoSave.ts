@@ -1,5 +1,5 @@
 import { useRef, useEffect } from "react";
-import { useApp } from "../context/AppContext";
+import { useApp } from "./useApp";
 
 /**
  * Parses an auto_save_interval string like "30s", "60s", "120s", "300s"

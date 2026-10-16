@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
-import { AppProvider, useApp } from '../context/AppContext'
+import { AppProvider } from '../context/AppContext'
+import { useApp } from '../hooks/useApp'
 
 // Mock API client
 vi.mock('../api/client', () => ({

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { useApp } from "../context/AppContext";
+import { useApp } from "../hooks/useApp";
 import config from "../config";
 
 const phases = [

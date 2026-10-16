@@ -88,11 +88,12 @@ class RedisRateLimitStore:
                 retry_on_timeout=False,
             )
             await self._redis.ping()
-            logger.info("Redis rate limit store connected on %s", self._redis_url)
-        except Exception as e:
+            logger.info("Redis rate limit store connected")
+        except Exception as exc:
             logger.warning(
                 "Redis unavailable (%s), falling back to in-memory rate limiting. "
-                "Install Redis or set redis_url in .env for production use.", e
+                "Install Redis or configure Redis for production use.",
+                type(exc).__name__,
             )
             self._redis = None
         return self._redis
@@ -135,8 +136,11 @@ class RedisRateLimitStore:
             await redis.expire(redis_key, window_s + 5)
             return True, count + 1, max(0, limit - (count + 1))
 
-        except Exception as e:
-            logger.warning("Redis rate limit error (%s), using in-memory fallback", e)
+        except Exception as exc:
+            logger.warning(
+                "Redis rate limit error (%s), using in-memory fallback",
+                type(exc).__name__,
+            )
             return await self._fallback.check_and_increment(key, window_s, limit)
 
 

@@ -4,7 +4,7 @@ Multi-method auth: email+password, phone+SMS, WeChat OAuth.
 PIPL: data export and account deletion.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 import logging
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,7 +45,12 @@ from app.schemas.auth import (
 
 logger = logging.getLogger(__name__)
 from app.services.sms_service import get_sms_service
-from app.services.orcid_service import exchange_code, get_authorize_url, decode_state_token
+from app.services.orcid_service import (
+    decode_state_token,
+    exchange_code,
+    get_authorize_url,
+    normalize_redirect_path,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -494,10 +499,13 @@ _orcid_auth_codes: dict[str, dict] = {}
 
 
 @router.get("/orcid", response_model=OrcidAuthorizeResponse)
-async def orcid_authorize(redirect_to: str = "/"):
+async def orcid_authorize(redirect_to: str = Query("/", max_length=512)):
     """Get the ORCID OAuth authorize URL.  Store the returned state token
     in sessionStorage and pass it when calling the callback."""
-    url, state = get_authorize_url(redirect_to)
+    try:
+        url, state = get_authorize_url(redirect_to)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid redirect path") from exc
     return OrcidAuthorizeResponse(authorize_url=url, state=state)
 
 
@@ -514,7 +522,10 @@ async def orcid_callback(code: str, state: str, db: AsyncSession = Depends(get_d
     if state_payload is None:
         raise HTTPException(status_code=400, detail="Invalid or expired state token")
 
-    redirect_to = state_payload.get("redirect_to", "/")
+    try:
+        redirect_to = normalize_redirect_path(state_payload.get("redirect_to", "/"))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid redirect path") from exc
 
     # Exchange authorization code for ORCID iD
     try:
@@ -579,8 +590,10 @@ async def orcid_callback(code: str, state: str, db: AsyncSession = Depends(get_d
     frontend_base = settings.public_base_url.rstrip("/")
     if not frontend_base:
         raise HTTPException(status_code=503, detail="ORCID redirect is not configured")
+    from urllib.parse import urlencode
+
     return RedirectResponse(
-        url=f"{frontend_base}/orcid-callback?auth_code={auth_code}&redirect_to={redirect_to}"
+        url=f"{frontend_base}/orcid-callback?{urlencode({'auth_code': auth_code, 'redirect_to': redirect_to})}"
     )
 
 

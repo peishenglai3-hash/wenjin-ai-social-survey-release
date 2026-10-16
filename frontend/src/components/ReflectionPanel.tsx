@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import api from "../api/client";
-import { DIM_LABELS_MAP } from "./SpectrumSliders";
+import { DIM_LABELS_MAP } from "../types/spectrum";
+import { getErrorMessage } from "../utils/errors";
 
 /* ── Types ─────────────────────────────────────────────────────────── */
 
@@ -48,7 +49,7 @@ export default function ReflectionPanel({ profileId, projectId, sourceSessionId,
       const { data } = await api.post("/reflection/start", { trigger_type: triggerType, profile_id: profileId, project_id: projectId, source_session_id: sourceSessionId });
       if (data.error) { setError(data.error); return; }
       setSession(data); setPhase("intro");
-    } catch (e: any) { setError(e?.response?.data?.error ?? e.message ?? "启动失败"); }
+    } catch (error: unknown) { setError(getErrorMessage(error, "启动失败")); }
     finally { setLoading(false); }
   }, [profileId, projectId, sourceSessionId]);
 
@@ -64,7 +65,7 @@ export default function ReflectionPanel({ profileId, projectId, sourceSessionId,
         setSession(p => p ? { ...p, current_question: data.next_question, question_number: data.question_number } : p);
         setPhase("answering");
       }
-    } catch (e: any) { setError(e?.response?.data?.error ?? "提交失败"); }
+    } catch (error: unknown) { setError(getErrorMessage(error, "提交失败")); }
     finally { setLoading(false); }
   }, [answer, session]);
 
@@ -75,7 +76,7 @@ export default function ReflectionPanel({ profileId, projectId, sourceSessionId,
       const { data } = await api.post("/reflection/conclude", { session_id: session.session_id, apply_adjustments: false });
       if (data.error) { setError(data.error); return; }
       setConclusion(data); setPhase("done"); onComplete?.(data);
-    } catch (e: any) { setError(e?.response?.data?.error ?? "总结失败"); }
+    } catch (error: unknown) { setError(getErrorMessage(error, "总结失败")); }
     finally { setLoading(false); }
   }, [session, onComplete]);
 

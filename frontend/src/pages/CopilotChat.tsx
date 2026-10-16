@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from "react";
-import { useApp } from "../context/AppContext";
+import { useApp } from "../hooks/useApp";
 import config from "../config";
 import { safeHtml } from "../utils/sanitize";
 import { getAuthHeaders } from "../utils/authFetch";
+import { getErrorMessage } from "../utils/errors";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -107,10 +108,10 @@ export default function CopilotChat() {
       }
 
       setMessages((prev) => [...prev, { role: "assistant", content: full }]);
-    } catch (err: any) {
+    } catch (error: unknown) {
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: `❌ 出错了: ${err.message || "请稍后重试"}` },
+        { role: "assistant", content: `❌ 出错了: ${getErrorMessage(error, "请稍后重试")}` },
       ]);
     } finally {
       setStreaming(false);
@@ -150,8 +151,8 @@ export default function CopilotChat() {
       } else {
         alert(`❌ 保存失败: ${data.error}`);
       }
-    } catch (err: any) {
-      alert(`❌ 网络错误: ${err.message}`);
+    } catch (error: unknown) {
+      alert(`❌ 网络错误: ${getErrorMessage(error, "请稍后重试")}`);
     } finally {
       setSavingSkill(false);
     }

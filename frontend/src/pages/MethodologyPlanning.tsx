@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import api from "../api/client";
 import { streamAI } from "../api/stream";
-import { useApp } from "../context/AppContext";
+import { useApp } from "../hooks/useApp";
 import QuickNav from "../components/QuickNav";
 
 export default function MethodologyPlanning() {
@@ -13,28 +13,28 @@ export default function MethodologyPlanning() {
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
 
-  const handleGenerate = async () => {
+  const handleGenerate = useCallback(async () => {
     if (!profile) return;
     setLoading(true);
     setGuidance("");
     await streamAI(
       "/profile/guidance/stream",
-      profile as unknown as Record<string, any>,
+      profile as unknown as Record<string, unknown>,
       (token) => setGuidance((prev) => prev + token),
       () => setLoading(false),
       (err) => { setGuidance(err); setLoading(false); },
     );
-  };
+  }, [profile]);
 
   // Auto-trigger guidance generation when navigated from Identity page
   useEffect(() => {
     const state = location.state as { autoGenerate?: boolean } | null;
     if (state?.autoGenerate && profile && !guidance && !loading) {
-      handleGenerate();
+      void Promise.resolve().then(handleGenerate);
       // Clear the state so it doesn't re-trigger on re-renders
       window.history.replaceState({}, document.title);
     }
-  }, [location.state, profile]);
+  }, [location.state, profile, guidance, loading, handleGenerate]);
 
   const handleDownload = async (fileType: "docx" | "md") => {
     if (!guidance) return;

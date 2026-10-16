@@ -30,6 +30,23 @@ interface CitationGraphProps {
   height?: number;
 }
 
+interface ChartEventParams {
+  dataType?: string;
+  data?: unknown;
+}
+
+function isChartEventParams(value: unknown): value is ChartEventParams {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isGraphNode(value: unknown): value is GraphNode {
+  return typeof value === "object" && value !== null && "id" in value && "name" in value;
+}
+
+function isGraphEdge(value: unknown): value is GraphEdge {
+  return typeof value === "object" && value !== null && "source" in value && "target" in value;
+}
+
 export default function CitationGraph({
   nodes,
   edges,
@@ -51,11 +68,13 @@ export default function CitationGraph({
 
     const option: echarts.EChartsOption = {
       tooltip: {
-        formatter: (params: any) => {
+        formatter: (params: unknown) => {
+          if (!isChartEventParams(params)) return "";
           if (params.dataType === "node") {
-            const d = params.data;
-            return `<b>${d.name}</b><br/>Year: ${d.year || "N/A"} · Citations: ${d.citations}<br/><small>${d.id}</small>`;
+            if (!isGraphNode(params.data)) return "";
+            return `<b>${params.data.name}</b><br/>Year: ${params.data.year || "N/A"} · Citations: ${params.data.citations}<br/><small>${params.data.id}</small>`;
           }
+          if (!isGraphEdge(params.data)) return "";
           return `${params.data.source} → ${params.data.target}`;
         },
       },
@@ -113,8 +132,9 @@ export default function CitationGraph({
 
     if (onNodeClick) {
       chart.off("click");
-      chart.on("click", (params: any) => {
-        if (params.dataType === "node" && params.data?.id) {
+      chart.on("click", (params: unknown) => {
+        if (!isChartEventParams(params)) return;
+        if (params.dataType === "node" && isGraphNode(params.data) && params.data.id) {
           onNodeClick(params.data.id);
         }
       });

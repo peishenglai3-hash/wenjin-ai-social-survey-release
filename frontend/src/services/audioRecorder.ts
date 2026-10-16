@@ -42,10 +42,14 @@ async function estimateStorageMB(): Promise<number | null> {
   return null;
 }
 
-async function requestWakeLock(): Promise<any> {
+interface WakeLockSentinelLike {
+  release(): Promise<void>;
+}
+
+async function requestWakeLock(): Promise<WakeLockSentinelLike | null> {
   if ("wakeLock" in navigator) {
     try {
-      return await (navigator as any).wakeLock.request("screen");
+      return await navigator.wakeLock.request("screen");
     } catch { /* user denied or not supported */ }
   }
   return null;
@@ -58,7 +62,7 @@ export class AudioRecorder {
   private startTime: number = 0;
   private chunkStartTime: number = 0;
   private elapsedTimer: ReturnType<typeof setInterval> | null = null;
-  private wakeLock: any = null;
+  private wakeLock: WakeLockSentinelLike | null = null;
   private chunkIndex: number = 0;
 
   public state: RecorderState = {
@@ -98,8 +102,9 @@ export class AudioRecorder {
           echoCancellation: true, noiseSuppression: true,
         },
       });
-    } catch (err: any) {
-      this.emitState({ status: "error", errorMessage: `麦克风权限被拒绝: ${err.message}` });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "未知错误";
+      this.emitState({ status: "error", errorMessage: `麦克风权限被拒绝: ${message}` });
       return;
     }
 
@@ -172,7 +177,7 @@ export class AudioRecorder {
       this.mediaRecorder!.onstop = () => {
         if (this.elapsedTimer) { clearInterval(this.elapsedTimer); this.elapsedTimer = null; }
         if (this.wakeLock) {
-          try { this.wakeLock.release(); } catch {}
+          try { void this.wakeLock.release(); } catch { /* already released */ }
           this.wakeLock = null;
         }
         if (this.stream) {

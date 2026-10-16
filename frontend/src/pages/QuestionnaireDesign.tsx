@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import api from "../api/client";
 import { streamAI } from "../api/stream";
-import { useApp } from "../context/AppContext";
+import { useApp } from "../hooks/useApp";
 import { safeHtml } from "../utils/sanitize";
 import QuickNav from "../components/QuickNav";
 

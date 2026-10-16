@@ -1,7 +1,8 @@
 import { useState, type FormEvent, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { useApp } from "../context/AppContext";
+import { useApp } from "../hooks/useApp";
 import { fetchCaptcha } from "../api/captcha";
+import { getErrorMessage } from "../utils/errors";
 
 type AuthTab = "email" | "phone";
 
@@ -46,7 +47,7 @@ export default function Register() {
     }
   };
 
-  useEffect(() => { loadCaptcha(); }, []);
+  useEffect(() => { void Promise.resolve().then(loadCaptcha); }, []);
   useEffect(() => {
     if (isAuthenticated) navigate("/", { replace: true });
   }, [isAuthenticated, navigate]);
@@ -67,8 +68,8 @@ export default function Register() {
     try {
       await register(email, password, displayName, captchaToken, captchaAnswer.trim());
       navigate("/", { replace: true });
-    } catch (err: any) {
-      setError(err.response?.data?.detail || "注册失败，请重试");
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, "注册失败，请重试"));
       loadCaptcha();
       setCaptchaAnswer("");
     } finally {
@@ -94,8 +95,8 @@ export default function Register() {
       setSmsCountdown(60);
       setPhoneCaptchaAnswer("");
       loadCaptcha();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || "发送验证码失败");
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, "发送验证码失败"));
       loadCaptcha();
       setPhoneCaptchaAnswer("");
     } finally {
@@ -112,8 +113,8 @@ export default function Register() {
     try {
       await registerPhone(phone, smsCode, phoneDisplayName, captchaToken, phoneCaptchaAnswer || captchaAnswer);
       navigate("/", { replace: true });
-    } catch (err: any) {
-      setError(err.response?.data?.detail || "注册失败，请重试");
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, "注册失败，请重试"));
       loadCaptcha();
       setPhoneCaptchaAnswer("");
     } finally {

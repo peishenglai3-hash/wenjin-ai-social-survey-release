@@ -14,6 +14,7 @@ import Skeleton from "../components/Skeleton";
 import ErrorState from "../components/ErrorState";
 import CitationGraph from "../components/CitationGraph";
 import { trackPageView, trackSearch } from "../utils/analytics";
+import { getErrorMessage } from "../utils/errors";
 
 /* ── Types ─────────────────────────────────────────── */
 interface PaperResult {
@@ -44,6 +45,19 @@ interface SearchResponse {
   query: string;
   count: number;
   papers: PaperResult[];
+}
+
+interface CitationGraphNode {
+  id: string;
+  name: string;
+  year: number | null;
+  citations: number;
+  symbolSize: number;
+}
+
+interface CitationGraphEdge {
+  source: string;
+  target: string;
 }
 
 /* ── Constants ─────────────────────────────────────── */
@@ -104,8 +118,8 @@ export default function LiteratureSearch() {
 
   // ── Citation Graph state ──
   const [graphDoi, setGraphDoi] = useState("");
-  const [graphNodes, setGraphNodes] = useState<any[]>([]);
-  const [graphEdges, setGraphEdges] = useState<any[]>([]);
+  const [graphNodes, setGraphNodes] = useState<CitationGraphNode[]>([]);
+  const [graphEdges, setGraphEdges] = useState<CitationGraphEdge[]>([]);
   const [graphSeedDoi, setGraphSeedDoi] = useState("");
   const [graphLoading, setGraphLoading] = useState(false);
   const [showGraph, setShowGraph] = useState(false);
@@ -148,15 +162,15 @@ export default function LiteratureSearch() {
         setTotalCount(data.count);
         setSearchedQuery(data.query);
         trackSearch(trimmed, { langPref, methodFilter, yearFrom, yearTo }, data.count);
-      } catch (err: any) {
-        setError(err.message || "文献检索失败，请检查网络连接后重试");
+      } catch (error: unknown) {
+        setError(getErrorMessage(error, "文献检索失败，请检查网络连接后重试"));
         setPapers([]);
         setTotalCount(0);
       } finally {
         setLoading(false);
       }
     },
-    [query, langPref, methodFilter, yearFrom, yearTo]
+    [query, langPref, methodFilter, yearFrom, yearTo, authHeaders]
   );
 
   /* ── Gap Analysis ────────────────────────────────── */
@@ -190,7 +204,7 @@ export default function LiteratureSearch() {
     } finally {
       setGapLoading(false);
     }
-  }, [query]);
+  }, [query, authHeaders]);
 
   /* ── Query Expansion ────────────────────────────────── */
   const doExpandQuery = useCallback(async () => {
@@ -207,7 +221,7 @@ export default function LiteratureSearch() {
       setExpandedQueries(data.expanded_queries || []);
     } catch { setExpandedQueries([]); }
     finally { setExpandingQuery(false); }
-  }, [query]);
+  }, [query, authHeaders]);
 
   /* ── SSE Streaming Search ───────────────────────────── */
   const doStreamSearch = useCallback(async (e?: React.FormEvent) => {
@@ -245,14 +259,14 @@ export default function LiteratureSearch() {
               const event = JSON.parse(line.slice(6));
               if (event.type === "paper") { collected.push(event.paper); setPapers([...collected]); setTotalCount(collected.length); setSearchedQuery(trimmed); }
               else if (event.type === "done") setTotalCount(event.total);
-            } catch {}
+            } catch { /* ignore malformed stream events */ }
           }
         }
       }
       trackSearch(trimmed, { langPref, methodFilter, yearFrom, yearTo }, collected.length);
-    } catch (err: any) { setError(err.message || "流式检索失败"); }
+    } catch (error: unknown) { setError(getErrorMessage(error, "流式检索失败")); }
     finally { setLoading(false); }
-  }, [query, langPref, methodFilter, yearFrom, yearTo, useExpand]);
+  }, [query, langPref, methodFilter, yearFrom, yearTo, useExpand, authHeaders]);
 
   /* ── Semantic Search ─────────────────────────────────── */
   const doSemanticSearch = useCallback(async (e?: React.FormEvent) => {
@@ -279,12 +293,12 @@ export default function LiteratureSearch() {
       setTotalCount(data.count || 0);
       setSearchedQuery(trimmed);
       trackSearch(trimmed, { langPref, method: "semantic" }, data.count);
-    } catch (err: any) {
-      setError(err.message || "语义检索失败");
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, "语义检索失败"));
       setPapers([]);
       setTotalCount(0);
     } finally { setLoading(false); }
-  }, [query, langPref]);
+  }, [query, langPref, authHeaders]);
 
   /* ── Citation Graph ─────────────────────────────────── */
   const doCitationGraph = useCallback(async (doi?: string) => {
@@ -300,10 +314,10 @@ export default function LiteratureSearch() {
       const data = await resp.json();
       setGraphNodes(data.nodes || []);
       setGraphEdges(data.edges || []);
-    } catch (err: any) {
-      setError(err.message || "引用图加载失败");
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, "引用图加载失败"));
     } finally { setGraphLoading(false); }
-  }, [graphDoi]);
+  }, [graphDoi, authHeaders]);
 
   /* ── Search dispatch ────────────────────────────────── */
   const handleSearch = useCallback((e?: React.FormEvent) => {
@@ -315,7 +329,7 @@ export default function LiteratureSearch() {
     } else {
       doSearch(e);
     }
-  }, [useSemantic, useStream, doStreamSearch, doSearch]);
+  }, [useSemantic, useStream, doSemanticSearch, doStreamSearch, doSearch]);
 
   return (
     <div className="page page-literature">

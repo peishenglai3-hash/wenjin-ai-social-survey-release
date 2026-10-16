@@ -1,12 +1,13 @@
 import { useState } from "react";
 import ReactEChartsCore from "echarts-for-react/lib/core";
 import * as echarts from "echarts/core";
+import type { EChartsCoreOption } from "echarts/core";
 import { BarChart, PieChart, ScatterChart, LineChart } from "echarts/charts";
 import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import api from "../api/client";
 import { streamAI } from "../api/stream";
-import { useApp } from "../context/AppContext";
+import { useApp } from "../hooks/useApp";
 import CodebookPanel from "../components/CodebookPanel";
 import QuickNav from "../components/QuickNav";
 
@@ -18,10 +19,38 @@ const analysisTypes = [
   { id: "mixed", label: "混合分析", desc: "量化+质性整合 · 联合展示" },
 ];
 
+interface ChartSeries {
+  [key: string]: unknown;
+  name?: string;
+  data?: unknown[];
+}
+
+interface ChartData {
+  legend?: string[];
+  categories?: string[];
+  series?: ChartSeries[];
+}
+
 interface ChartConfig {
   title?: string;
   type: "bar" | "pie" | "scatter" | "line";
-  data: any;
+  data: unknown;
+}
+
+function isChartConfig(value: unknown): value is ChartConfig {
+  if (typeof value !== "object" || value === null || !("type" in value)) return false;
+  const type = value.type;
+  return type === "bar" || type === "pie" || type === "scatter" || type === "line";
+}
+
+function getChartData(value: unknown): ChartData {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
+  const data = value as Record<string, unknown>;
+  return {
+    legend: Array.isArray(data.legend) ? data.legend.filter((item): item is string => typeof item === "string") : [],
+    categories: Array.isArray(data.categories) ? data.categories.filter((item): item is string => typeof item === "string") : [],
+    series: Array.isArray(data.series) ? data.series.filter((item): item is ChartSeries => typeof item === "object" && item !== null) : [],
+  };
 }
 
 function parseChartJson(text: string): ChartConfig[] {
@@ -31,11 +60,8 @@ function parseChartJson(text: string): ChartConfig[] {
     for (const block of jsonMatch) {
       try {
         const json = JSON.parse(block.replace(/```chartjson\n?/g, "").replace(/```/g, ""));
-        if (Array.isArray(json)) {
-          charts.push(...json);
-        } else {
-          charts.push(json);
-        }
+        if (Array.isArray(json)) charts.push(...json.filter(isChartConfig));
+        else if (isChartConfig(json)) charts.push(json);
       } catch {
         // skip broken chart json
       }
@@ -44,13 +70,14 @@ function parseChartJson(text: string): ChartConfig[] {
   return charts;
 }
 
-function chartToOption(c: ChartConfig): any {
+function chartToOption(c: ChartConfig): EChartsCoreOption {
+  const data = getChartData(c.data);
   if (c.type === "pie") {
     return {
       title: { text: c.title, left: "center" },
       tooltip: { trigger: "item" },
       legend: { orient: "vertical", left: "left" },
-      series: [{ type: "pie", radius: "50%", data: c.data, emphasis: { itemStyle: { shadowBlur: 10 } } }],
+      series: [{ type: "pie", radius: "50%", data: Array.isArray(c.data) ? c.data : [], emphasis: { itemStyle: { shadowBlur: 10 } } }],
     };
   }
   if (c.type === "scatter") {
@@ -59,16 +86,16 @@ function chartToOption(c: ChartConfig): any {
       tooltip: { trigger: "item" },
       xAxis: {},
       yAxis: {},
-      series: [{ type: "scatter", data: c.data }],
+      series: [{ type: "scatter", data: Array.isArray(c.data) ? c.data : [] }],
     };
   }
   return {
     title: { text: c.title, left: "center" },
     tooltip: { trigger: "axis" },
-    legend: { data: c.data?.legend || [] },
-    xAxis: { type: "category", data: c.data?.categories || [] },
+    legend: { data: data.legend },
+    xAxis: { type: "category", data: data.categories },
     yAxis: { type: "value" },
-    series: (c.data?.series || []).map((s: any) => ({ ...s, type: c.type })),
+    series: (data.series || []).map((series) => ({ ...series, type: c.type })),
   };
 }
 

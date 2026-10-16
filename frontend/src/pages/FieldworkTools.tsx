@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import api from "../api/client";
 import { streamAI } from "../api/stream";
-import { useApp } from "../context/AppContext";
+import { useApp } from "../hooks/useApp";
 import { validateFile } from "../utils/uploadValidation";
 import { useAutoSave } from "../hooks/useAutoSave";
 import QuickNav from "../components/QuickNav";
@@ -10,7 +10,7 @@ import CameraCapture from "../components/CameraCapture";
 import type { FacialSignal } from "../components/CameraCapture";
 import EmotionDashboard from "../components/EmotionDashboard";
 import HintOverlay from "../components/HintOverlay";
-import type { Hint } from "../components/HintOverlay";
+import type { Hint } from "../types/hints";
 import QuestionnaireFill from "../components/QuestionnaireFill";
 import config from "../config";
 import { getAccessToken } from "../api/client";
@@ -20,10 +20,81 @@ import { AudioRecorder, type RecorderState } from "../services/audioRecorder";
 import { fetchFieldNotes, createFieldNote, updateFieldNote, deleteFieldNote } from "../api/coding";
 import type { FieldNoteItem, NoteType } from "../types/coding";
 import { NOTE_TYPE_LABELS, NOTE_TYPE_ICONS } from "../types/coding";
+import { getErrorMessage, getErrorName } from "../utils/errors";
+
+interface SpeechRecognitionResultLike {
+  isFinal: boolean;
+  0: { transcript: string };
+}
+
+interface SpeechRecognitionResultEventLike {
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionResultLike>;
+}
+
+interface SpeechRecognitionErrorEventLike {
+  error: string;
+}
+
+interface SpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onstart: (() => void) | null;
+  onresult: ((event: SpeechRecognitionResultEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
+interface WindowWithSpeechRecognition extends Window {
+  SpeechRecognition?: SpeechRecognitionConstructor;
+  webkitSpeechRecognition?: SpeechRecognitionConstructor;
+}
+
+interface QuestionnaireData {
+  id: number;
+  title: string;
+  constructs_json: string;
+  questions_json: string;
+  total_items: number;
+  estimated_time_minutes: number;
+}
+
+interface SurveyQuestionStats {
+  question_id: string;
+  frequencies: Record<string, number>;
+}
+
+interface SurveyStats {
+  total_responses: number;
+  question_stats: SurveyQuestionStats[];
+}
+
+interface TranscriptionSentence {
+  begin_time: number;
+  end_time: number;
+  speaker_id?: string;
+  text: string;
+}
+
+interface FileResult {
+  error?: string;
+  status?: string;
+  message?: string;
+  file_id?: string;
+  transcript?: string;
+  analysis?: string;
+  sentences?: TranscriptionSentence[];
+}
 
 // Check browser speech recognition support
 const SpeechRecognitionAPI =
-  (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  (window as WindowWithSpeechRecognition).SpeechRecognition ||
+  (window as WindowWithSpeechRecognition).webkitSpeechRecognition;
 
 function getWsUrl(endpoint: "asr" | "asr/qwen" | "facial" = "asr"): string {
   const loc = window.location;
@@ -104,7 +175,7 @@ export default function FieldworkTools() {
   const facialWsRef = useRef<WebSocket | null>(null);  // Facial signal WebSocket
   const audioCtxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const speechRef = useRef<any>(null); // SpeechRecognition instance
+  const speechRef = useRef<SpeechRecognitionLike | null>(null); // SpeechRecognition instance
   // Refs to avoid stale closures in callbacks
   const statusRef = useRef(status);
   const currentSpeakerRef = useRef<Speaker>(currentSpeaker);
@@ -114,6 +185,7 @@ export default function FieldworkTools() {
   // ── Hints State ──
   const [hints, setHints] = useState<string[]>([]);
   const [hintsLoading, setHintsLoading] = useState(false);
+  const fetchHintsRef = useRef<() => Promise<void>>(async () => {});
 
   // ── Notes & Summary State ──
   const [notes, setNotes] = useState("");
@@ -140,8 +212,8 @@ export default function FieldworkTools() {
   interface QListItem { id: number; title: string; total_items: number; }
   const [questionnaireList, setQuestionnaireList] = useState<QListItem[]>([]);
   const [selectedQId, setSelectedQId] = useState<number | null>(null);
-  const [questionnaireData, setQuestionnaireData] = useState<any>(null);
-  const [surveyStats, setSurveyStats] = useState<any>(null);
+  const [questionnaireData, setQuestionnaireData] = useState<QuestionnaireData | null>(null);
+  const [surveyStats, setSurveyStats] = useState<SurveyStats | null>(null);
 
   // Load field notes on mount and when session changes
   const loadFieldNotes = useCallback(async (sessionId?: number) => {
@@ -187,7 +259,7 @@ export default function FieldworkTools() {
   const handleEditNote = async (noteId: number) => {
     if (!editingNoteContent.trim()) return;
     try {
-      await updateFieldNote(noteId, { content: editingNoteContent.trim() } as any);
+      await updateFieldNote(noteId, { content: editingNoteContent.trim() });
       setEditingNoteId(null);
       setEditingNoteContent("");
       await loadFieldNotes();
@@ -246,12 +318,13 @@ export default function FieldworkTools() {
   useEffect(() => { currentSpeakerRef.current = currentSpeaker; }, [currentSpeaker]);
   useEffect(() => { transcriptLenRef.current = transcript.length; }, [transcript]);
 
+  const shouldFetchHints = status === "recording" && transcript.length > 100;
   useEffect(() => {
-    if (status === "recording" && transcript.length > 100) {
+    if (shouldFetchHints) {
       // Only set interval if one isn't already running
       if (!hintsTimerRef.current) {
         hintsTimerRef.current = setInterval(() => {
-          fetchHints();
+          void fetchHintsRef.current();
         }, 45000);
       }
     } else {
@@ -266,7 +339,7 @@ export default function FieldworkTools() {
         hintsTimerRef.current = null;
       }
     };
-  }, [status, transcript.length > 99]); // Only re-evaluate on status change or crossing 100-char threshold
+  }, [shouldFetchHints]); // Only re-evaluate on status change or crossing 100-char threshold
 
   const lastFacialSendRef = useRef(0);  // throttle facial WS sends
 
@@ -333,7 +406,7 @@ export default function FieldworkTools() {
     speechActiveRef.current = false;
     // Stop browser speech recognition
     if (speechRef.current) {
-      try { speechRef.current.stop(); } catch {}
+      try { speechRef.current.stop(); } catch { /* already stopped */ }
       speechRef.current = null;
     }
     // Stop Xunfei WebSocket
@@ -374,7 +447,7 @@ export default function FieldworkTools() {
       setStatus("recording");
     };
 
-    recognition.onresult = (event: any) => {
+    recognition.onresult = (event: SpeechRecognitionResultEventLike) => {
       let interim = "";
       const now = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -400,7 +473,7 @@ export default function FieldworkTools() {
       setInterimText(interim);
     };
 
-    recognition.onerror = (event: any) => {
+    recognition.onerror = (event: SpeechRecognitionErrorEventLike) => {
       console.error("Browser ASR error:", event.error);
       if (event.error === "not-allowed") {
         setErrorMsg("麦克风权限被拒绝，请在浏览器设置中允许访问麦克风");
@@ -459,8 +532,8 @@ export default function FieldworkTools() {
         stream.getTracks().forEach((t) => t.stop());
         startBrowserASR();
         return;
-      } catch (err: any) {
-        if (err.name === "NotAllowedError") {
+      } catch (err: unknown) {
+        if (getErrorName(err) === "NotAllowedError") {
           setErrorMsg("麦克风权限被拒绝，请在浏览器设置中允许访问麦克风");
           setStatus("error");
           return;
@@ -540,11 +613,11 @@ export default function FieldworkTools() {
           setStatus("error");
         }
       }, 10000);
-    } catch (err: any) {
-      if (err.name === "NotAllowedError") {
+    } catch (err: unknown) {
+      if (getErrorName(err) === "NotAllowedError") {
         setErrorMsg("麦克风权限被拒绝，请在浏览器设置中允许访问麦克风");
       } else {
-        setErrorMsg(`录音启动失败: ${err.message}`);
+        setErrorMsg(`录音启动失败: ${getErrorMessage(err, "未知错误")}`);
       }
       setStatus("error");
     }
@@ -616,6 +689,8 @@ export default function FieldworkTools() {
       setHintsLoading(false);
     }
   };
+
+  fetchHintsRef.current = fetchHints;
 
   const fetchHintsStream = async () => {
     if (!transcript.trim() || transcript.length < 50) return;
@@ -739,7 +814,7 @@ export default function FieldworkTools() {
   // ── File Upload Transcription State ──
   const [fileUpload, setFileUpload] = useState<File | null>(null);
   const [fileUploading, setFileUploading] = useState(false);
-  const [fileResult, setFileResult] = useState<any>(null);
+  const [fileResult, setFileResult] = useState<FileResult | null>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -769,8 +844,8 @@ export default function FieldworkTools() {
         headers: { "Content-Type": "multipart/form-data" },
       });
       setFileResult(res.data);
-    } catch (e: any) {
-      setFileResult({ error: e.message || "上传失败" });
+    } catch (error: unknown) {
+      setFileResult({ error: getErrorMessage(error, "上传失败") });
     } finally {
       setFileUploading(false);
     }
@@ -1806,9 +1881,9 @@ export default function FieldworkTools() {
                       transcript: fileResult.transcript,
                       theme,
                     });
-                    setFileResult((prev: any) => ({ ...prev, analysis: res.data.analysis }));
-                  } catch (e: any) {
-                    setFileResult((prev: any) => ({ ...prev, analysis: "AI分析失败: " + (e.message || "未知错误") }));
+                    setFileResult((prev) => prev ? { ...prev, analysis: res.data.analysis } : prev);
+                  } catch (error: unknown) {
+                    setFileResult((prev) => prev ? { ...prev, analysis: `AI分析失败: ${getErrorMessage(error, "未知错误")}` } : prev);
                   } finally {
                     setFileUploading(false);
                   }
@@ -1854,7 +1929,7 @@ export default function FieldworkTools() {
                     <details style={{ marginTop: 12 }}>
                       <summary style={{ cursor: "pointer", fontSize: 13 }}>查看逐句时间戳（{fileResult.sentences.length}句）</summary>
                       <div style={{ maxHeight: 300, overflowY: "auto", marginTop: 8 }}>
-                        {fileResult.sentences.map((s: any, i: number) => (
+                        {fileResult.sentences.map((s, i) => (
                           <div key={i} style={{ padding: "4px 8px", fontSize: 12, borderBottom: "1px solid var(--border)" }}>
                             <span style={{ color: "#94A3B8" }}>[{s.begin_time}s-{s.end_time}s]</span>
                             {s.speaker_id && <span style={{ color: "var(--primary)", marginLeft: 8 }}>说话人{s.speaker_id}:</span>}
@@ -2090,9 +2165,9 @@ export default function FieldworkTools() {
                   fontSize: 13,
                 }}>
                   📊 已收集 <strong>{surveyStats.total_responses}</strong> 份回答
-                  {surveyStats.question_stats.slice(0, 3).map((qs: any) => (
+                  {surveyStats.question_stats.slice(0, 3).map((qs) => (
                     <span key={qs.question_id} style={{ marginLeft: 12, fontSize: 11, color: "var(--text-muted)" }}>
-                      {qs.question_id}: {Object.values(qs.frequencies).reduce((a: number, b: any) => a + b, 0)}人
+                      {qs.question_id}: {Object.values(qs.frequencies).reduce((total, count) => total + count, 0)}人
                     </span>
                   ))}
                 </div>

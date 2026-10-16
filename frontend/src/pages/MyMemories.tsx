@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useApp } from "../context/AppContext";
+import { useState, useEffect, useCallback } from "react";
+import { useApp } from "../hooks/useApp";
 import api from "../api/client";
 
 interface MemoryItem {
@@ -46,7 +46,7 @@ export default function MyMemories() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
 
-  const fetchMemories = async () => {
+  const fetchMemories = useCallback(async () => {
     setLoading(true);
     try {
       const res = await api.get("/memory/list", { params: { profile_id: pid } });
@@ -56,11 +56,11 @@ export default function MyMemories() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pid]);
 
   useEffect(() => {
-    fetchMemories();
-  }, [pid]);
+    void Promise.resolve().then(fetchMemories);
+  }, [fetchMemories]);
 
   const confirmMemory = async (id: number) => {
     await api.post("/memory/confirm", { memory_id: id, profile_id: pid });

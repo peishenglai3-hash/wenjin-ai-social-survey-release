@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useApp } from "../context/AppContext";
+import { useApp } from "../hooks/useApp";
+import { getErrorMessage } from "../utils/errors";
 
 /**
  * ORCID OAuth callback page — receives auth_code from backend redirect,
@@ -12,14 +13,12 @@ export default function OrcidCallback() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { orcidExchange } = useApp();
-  const [error, setError] = useState("");
+  const authCode = searchParams.get("auth_code");
+  const redirectTo = searchParams.get("redirect_to") || "/";
+  const [error, setError] = useState(authCode ? "" : "Missing auth_code parameter from ORCID callback");
 
   useEffect(() => {
-    const authCode = searchParams.get("auth_code");
-    const redirectTo = searchParams.get("redirect_to") || "/";
-
     if (!authCode) {
-      setError("Missing auth_code parameter from ORCID callback");
       return;
     }
 
@@ -27,10 +26,10 @@ export default function OrcidCallback() {
       .then(() => {
         navigate(redirectTo, { replace: true });
       })
-      .catch((err: any) => {
-        setError(err.response?.data?.detail || "ORCID 登录失败，请重试");
+      .catch((error: unknown) => {
+        setError(getErrorMessage(error, "ORCID 登录失败，请重试"));
       });
-  }, [searchParams, navigate, orcidExchange]);
+  }, [authCode, redirectTo, navigate, orcidExchange]);
 
   if (error) {
     return (

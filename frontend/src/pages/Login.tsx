@@ -1,7 +1,8 @@
 import { useState, type FormEvent, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { useApp } from "../context/AppContext";
+import { useApp } from "../hooks/useApp";
 import { fetchCaptcha } from "../api/captcha";
+import { getErrorMessage } from "../utils/errors";
 
 type AuthTab = "email" | "phone" | "guest";
 
@@ -43,7 +44,7 @@ export default function Login() {
   };
 
   useEffect(() => {
-    if (tab === "phone") loadCaptcha();
+    if (tab === "phone") void Promise.resolve().then(loadCaptcha);
   }, [tab]);
 
   useEffect(() => {
@@ -69,9 +70,8 @@ export default function Login() {
       setSmsCountdown(60);
       setCaptchaAnswer("");
       loadCaptcha();
-    } catch (err: any) {
-      const detail = err.response?.data?.detail || "发送验证码失败";
-      setError(detail);
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, "发送验证码失败"));
       loadCaptcha();
       setCaptchaAnswer("");
     } finally {
@@ -86,8 +86,8 @@ export default function Login() {
     try {
       await login(email, password);
       navigate("/", { replace: true });
-    } catch (err: any) {
-      setError(err.response?.data?.detail || "登录失败，请重试");
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, "登录失败，请重试"));
     } finally {
       setLoading(false);
     }
@@ -102,8 +102,8 @@ export default function Login() {
     try {
       await loginPhone(phone, smsCode);
       navigate("/", { replace: true });
-    } catch (err: any) {
-      setError(err.response?.data?.detail || "登录失败，请重试");
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, "登录失败，请重试"));
     } finally {
       setLoading(false);
     }

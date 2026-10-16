@@ -23,14 +23,14 @@ export function getAccessToken(): string | null {
 let isRefreshing = false;
 let failedQueue: Array<{
   resolve: (token: string) => void;
-  reject: (err: any) => void;
+  reject: (err: unknown) => void;
 }> = [];
 
 function getToken(): string | null {
   return inMemoryAccessToken;
 }
 
-function processQueue(error: any, token: string | null = null) {
+function processQueue(error: unknown, token: string | null = null): void {
   failedQueue.forEach((prom) => {
     if (error) {
       prom.reject(error);

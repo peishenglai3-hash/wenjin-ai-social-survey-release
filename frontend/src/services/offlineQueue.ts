@@ -22,7 +22,7 @@ export interface QueuedSession {
   /** Endpoint to POST to (e.g. "/fieldwork/sessions") */
   endpoint: string;
   /** Request body */
-  payload: Record<string, any>;
+  payload: Record<string, unknown>;
   /** ISO timestamp when queued */
   queued_at: string;
   /** ISO timestamp after which the item is discarded */
@@ -163,7 +163,7 @@ if (typeof window !== "undefined") {
 /** Enqueue a session for later sync. Tries immediate send first; queues on failure. */
 export async function enqueueSession(
   endpoint: string,
-  payload: Record<string, any>,
+  payload: Record<string, unknown>,
 ): Promise<{ queued: boolean; client_id: string }> {
   const client_id = crypto.randomUUID();
   const apiBase = config.apiBaseUrl || "";

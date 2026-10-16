@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { useApp } from "../context/AppContext";
+import { useApp } from "../hooks/useApp";
+import { getErrorMessage } from "../utils/errors";
 import config from "../config";
 import { safeHtml } from "../utils/sanitize";
 import { getAuthHeaders } from "../utils/authFetch";
@@ -81,10 +82,10 @@ export default function Copilot() {
       }
 
       setMessages((prev) => [...prev, { role: "assistant", content: full }]);
-    } catch (err: any) {
+    } catch (error: unknown) {
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: `❌ 出错了: ${err.message || "请稍后重试"}` },
+        { role: "assistant", content: `❌ 出错了: ${getErrorMessage(error, "请稍后重试")}` },
       ]);
     } finally {
       setStreaming(false);

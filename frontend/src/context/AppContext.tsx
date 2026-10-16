@@ -1,104 +1,7 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useCallback, type ReactNode } from "react";
 import api, { setAccessToken as setClientAccessToken } from "../api/client";
 import { clearOfflineQueue } from "../services/offlineQueue";
-
-interface UserProfile {
-  id: number;
-  mode: string;
-  gender: string | null;
-  role: string;
-  experience_level: string;
-  age_range: string | null;
-  mbti: string | null;
-  paradigm_preference: string;
-  scenario_preference: string;
-  theme_preference?: string;
-  // Spectrum
-  theory_driven?: number;
-  methodological_rigidity?: number;
-  analysis_depth?: number;
-  structure_preference?: number;
-  participation_level?: number;
-  tech_dependency?: number;
-  writing_style?: number;
-  learning_preference?: number;
-  // Settings
-  ai_temperature?: number;
-  ai_model_pref?: string;
-  ai_hint_frequency?: string;
-  ui_font_size?: string;
-  ui_high_contrast?: boolean;
-  default_export_format?: string;
-  auto_save_interval?: string;
-}
-
-interface SurveyProject {
-  id: number;
-  title: string;
-  research_direction: string | null;
-  paradigm: string;
-  phase: string;
-  status: string;
-}
-
-// ── Auth types ─────────────────────────────────────────────
-interface AuthUser {
-  id: number;
-  email: string;
-  display_name: string;
-  role: string;
-  is_active: boolean;
-}
-
-interface AuthState {
-  access_token: string | null;
-  user: AuthUser | null;
-  isAuthenticated: boolean;
-  isAuthLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  loginPhone: (phone: string, sms_code: string) => Promise<void>;
-  register: (email: string, password: string, display_name: string, captcha_token: string, captcha_answer: string) => Promise<void>;
-  registerPhone: (phone: string, sms_code: string, display_name: string, captcha_token: string, captcha_answer: string) => Promise<void>;
-  sendSmsCode: (phone: string, captcha_token: string, captcha_answer: string) => Promise<void>;
-  loginGuest: () => void;
-  logout: () => void;
-  refreshToken: () => Promise<boolean>;
-  orcidLogin: () => Promise<void>;
-  orcidExchange: (authCode: string) => Promise<void>;
-}
-
-interface AppState extends AuthState {
-  profile: UserProfile | null;
-  setProfile: (p: UserProfile | null) => void;
-  project: SurveyProject | null;
-  setProject: (p: SurveyProject | null) => void;
-  theme: string;
-  setTheme: (t: string) => void;
-}
-
-const AppCtx = createContext<AppState>({
-  profile: null,
-  setProfile: () => {},
-  project: null,
-  setProject: () => {},
-  theme: "academic",
-  setTheme: () => {},
-  // Auth defaults
-  access_token: null,
-  user: null,
-  isAuthenticated: false,
-  isAuthLoading: true,
-  login: async () => {},
-  loginPhone: async () => {},
-  register: async () => {},
-  registerPhone: async () => {},
-  sendSmsCode: async () => {},
-  loginGuest: () => {},
-  logout: () => {},
-  refreshToken: async () => false,
-  orcidLogin: async () => {},
-  orcidExchange: async () => {},
-});
+import { AppCtx, type UserProfile, type SurveyProject, type AuthUser } from "./contextValue";
 
 function getInitialTheme(): string {
   try {
@@ -112,7 +15,6 @@ function getInitialTheme(): string {
   } catch { /* ignore */ }
   return "academic";
 }
-
 export function AppProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(() => {
     try {
@@ -342,9 +244,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Sync theme from profile on first load
   useEffect(() => {
     if (profile?.theme_preference && profile.theme_preference !== theme) {
-      setThemeState(profile.theme_preference);
+      void Promise.resolve().then(() => setThemeState(profile.theme_preference!));
     }
-  }, [profile?.theme_preference]);
+  }, [profile?.theme_preference, theme]);
 
   useEffect(() => {
     if (profile) {
@@ -372,8 +274,4 @@ export function AppProvider({ children }: { children: ReactNode }) {
       {children}
     </AppCtx.Provider>
   );
-}
-
-export function useApp() {
-  return useContext(AppCtx);
 }
