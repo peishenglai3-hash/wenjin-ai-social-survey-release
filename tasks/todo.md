@@ -6,8 +6,8 @@
 
 - [x] P0.1 建立 `AGENTS.md` 项目规则文件。
 - [x] P0.2 生成当前 main 与原 master 功能/环境基线报告（后端完整依赖与 Docker smoke 待补证据）。
-- [ ] P0.3 建立 ADR 目录和第一批架构决策草案。
-- [ ] P0.4 记录基线测试、构建、secret scan 和工作树状态。
+- [x] P0.3 建立 ADR 目录和第一批架构决策草案。
+- [x] P0.4 记录基线测试、构建、secret scan 和工作树状态；后续切片证据持续追加。
 
 ## 技术与环境评审
 
@@ -18,7 +18,7 @@
 ## 平台硬化
 
 - [ ] P1 配置、启动失败、错误 envelope、request ID 和日志脱敏。
-- [ ] P2 认证、CORS、JWT/token 存储、对象归属、上传和 SSRF 边界。
+- [ ] P2 认证、CORS、JWT/token 存储、对象归属、上传和 SSRF 边界（上传/田野 FileTrans 已部分完成，对象归属和会话仍未完成）。
 - [ ] P3 数据库迁移、SQLite/PostgreSQL、Redis 和 Compose 环境。
 - [ ] P4 CI lint/type/test/build/security/license/secret gates。
 
