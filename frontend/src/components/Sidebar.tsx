@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { useApp } from "../context/AppContext";
+import config from "../config";
 
 const phases = [
   {
@@ -58,6 +59,13 @@ const phases = [
     ],
     defaultOpen: true,
   },
+  {
+    label: "协作研究",
+    icon: "🤝",
+    items: [{ path: "/collaboration", label: "协作工作台" }],
+    defaultOpen: true,
+    feature: "collaborationV1",
+  },
 ];
 
 const themeOptions = [
@@ -84,7 +92,7 @@ export default function Sidebar() {
     <aside className="app-sidebar">
       <div className="sidebar-brand">AI 社会调查</div>
       <nav className="sidebar-nav">
-        {phases.map((phase) => (
+        {phases.filter((phase) => !phase.feature || config.collaborationV1Enabled).map((phase) => (
           <div key={phase.label} className="phase-group">
             <button className="phase-header" onClick={() => toggle(phase.label)}>
               <span className="phase-icon">{phase.icon}</span>

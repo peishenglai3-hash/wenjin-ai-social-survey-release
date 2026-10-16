@@ -1,5 +1,18 @@
 # React + TypeScript + Vite
 
+## Wenjin deployment notes
+
+The collaboration research V1 UI is disabled by default. Enable it only for a
+deployment that has reviewed project membership, redaction and retention
+policies:
+
+```text
+VITE_COLLABORATION_V1_ENABLED=true
+```
+
+Do not put provider API keys, refresh tokens or other secrets in any `VITE_*`
+variable; Vite variables are exposed to the browser bundle.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

@@ -72,6 +72,9 @@ const LiteratureSearch = lazy(() => import(
 const MyMemories = lazy(() => import(
   /* webpackChunkName: "phase-5-knowledge" */ "./pages/MyMemories"
 ));
+const Collaboration = lazy(() => import(
+  /* webpackChunkName: "phase-collaboration" */ "./pages/Collaboration"
+));
 
 // Community
 const CommunityHome = lazy(() => import(
@@ -168,6 +171,9 @@ export default function App() {
             } />
             <Route path="memories" element={
               <Suspense fallback={<PageSkeleton />}><MyMemories /></Suspense>
+            } />
+            <Route path="collaboration" element={
+              <Suspense fallback={<PageSkeleton />}><Collaboration /></Suspense>
             } />
             <Route path="settings" element={
               <Suspense fallback={<PageSkeleton />}><Settings /></Suspense>

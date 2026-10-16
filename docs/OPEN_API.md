@@ -2,6 +2,8 @@
 
 当前 Open API 是受认证保护的窄范围 gateway，不是匿名公共 SaaS。它的目标是先固定 provider contract 和安全边界，让部署者能够在自己的服务端配置供应商，再由第三方客户端调用问津后端。
 
+因此，后来使用者只需要在自己的 Wenjin 部署环境配置自己的 provider key；客户端只持有问津 access token，不需要也不应该把供应商 key 交给浏览器或第三方插件。
+
 ## 安全边界
 
 - provider key、base URL 和模型配置只读取后端环境变量或受控 secret manager。
