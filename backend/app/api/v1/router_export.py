@@ -13,7 +13,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_ai_service, get_db, ensure_upload_dir
-from app.models.survey import ExportDocument
+from app.api.deps_auth import get_current_profile
+from app.models.survey import ExportDocument, SurveyProject, UserProfile
 from app.services.ai import AIService
 from app.services.export_service import generate_docx, generate_xlsx
 from app.skills.mode_prompts import get_mode_modifier
@@ -252,7 +253,12 @@ async def export_formats():
 
 
 @router.post("/export/generate")
-async def export_generate(payload: dict, ai: AIService = Depends(get_ai_service), db: AsyncSession = Depends(get_db)):
+async def export_generate(
+    payload: dict,
+    profile: UserProfile = Depends(get_current_profile),
+    ai: AIService = Depends(get_ai_service),
+    db: AsyncSession = Depends(get_db),
+):
     format_id = payload.get("format", "report")
     content = payload.get("content", "")
     additional_notes = payload.get("notes", "")
@@ -261,6 +267,20 @@ async def export_generate(payload: dict, ai: AIService = Depends(get_ai_service)
 
     if not content.strip():
         return {"error": "content is required"}
+
+    try:
+        project_id = int(project_id or 0)
+    except (TypeError, ValueError):
+        project_id = 0
+    if project_id:
+        project_result = await db.execute(
+            select(SurveyProject).where(
+                SurveyProject.id == project_id,
+                SurveyProject.profile_id == profile.id,
+            )
+        )
+        if project_result.scalar_one_or_none() is None:
+            return {"error": "Project not found"}
 
     export_prompt = EXPORT_PROMPTS.get(format_id, EXPORT_PROMPTS["report"])
     mode_export_hint = get_mode_modifier(theme, "export")
@@ -348,9 +368,21 @@ async def export_generate_file(payload: dict, ai: AIService = Depends(get_ai_ser
 
 
 @router.get("/export/download/{export_id}")
-async def export_download(export_id: int, format: str = "docx", db: AsyncSession = Depends(get_db)):
+async def export_download(
+    export_id: int,
+    format: str = "docx",
+    profile: UserProfile = Depends(get_current_profile),
+    db: AsyncSession = Depends(get_db),
+):
     """Download an existing export record as a file."""
-    result = await db.execute(select(ExportDocument).where(ExportDocument.id == export_id))
+    result = await db.execute(
+        select(ExportDocument)
+        .join(SurveyProject, SurveyProject.id == ExportDocument.project_id)
+        .where(
+            ExportDocument.id == export_id,
+            SurveyProject.profile_id == profile.id,
+        )
+    )
     doc = result.scalar_one_or_none()
     if not doc:
         return {"error": "Export not found"}
