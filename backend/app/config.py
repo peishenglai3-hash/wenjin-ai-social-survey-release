@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from pydantic import field_validator
+from urllib.parse import urlsplit
 
 
 class Settings(BaseSettings):
@@ -75,6 +76,10 @@ class Settings(BaseSettings):
     open_api_fake_enabled: bool = False
     open_api_max_messages: int = 64
     open_api_max_tokens: int = 8192
+    open_api_daily_request_quota: int = 1000
+    open_api_daily_token_quota: int = 100_000
+    open_api_retry_attempts: int = 1
+    open_api_retry_backoff_s: float = 0.05
     qwen_model: str = "qwen-plus"
 
     # ── Xunfei ASR (legacy fallback) ──
@@ -150,6 +155,28 @@ class Settings(BaseSettings):
                 "JWT_SECRET must be a deployment-specific random value of at least 32 characters"
             )
         return secret
+
+    @field_validator("cors_origins")
+    @classmethod
+    def validate_cors_origins(cls, values: list[str]) -> list[str]:
+        """Reject wildcard and malformed origins while credentials are enabled."""
+        cleaned: list[str] = []
+        for raw in values:
+            origin = raw.strip().rstrip("/")
+            if origin == "*":
+                raise ValueError("CORS_ORIGINS cannot contain '*' when credentials are enabled")
+            parsed = urlsplit(origin)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                raise ValueError(f"Invalid CORS origin: {raw!r}")
+            if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+                raise ValueError(f"CORS origin must not contain a path or query: {raw!r}")
+            if parsed.username or parsed.password:
+                raise ValueError(f"CORS origin must not contain credentials: {raw!r}")
+            if origin not in cleaned:
+                cleaned.append(origin)
+        if not cleaned:
+            raise ValueError("CORS_ORIGINS must contain at least one explicit origin")
+        return cleaned
 
 
 settings = Settings()

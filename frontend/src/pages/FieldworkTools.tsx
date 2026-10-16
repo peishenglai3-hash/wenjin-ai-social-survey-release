@@ -13,6 +13,7 @@ import HintOverlay from "../components/HintOverlay";
 import type { Hint } from "../components/HintOverlay";
 import QuestionnaireFill from "../components/QuestionnaireFill";
 import config from "../config";
+import { getAccessToken } from "../api/client";
 import { getAuthHeaders } from "../utils/authFetch";
 import { enqueueSession, getQueueSize, flushQueue, startAutoFlush, getOnlineStatus } from "../services/offlineQueue";
 import { AudioRecorder, type RecorderState } from "../services/audioRecorder";
@@ -31,6 +32,14 @@ function getWsUrl(endpoint: "asr" | "asr/qwen" | "facial" = "asr"): string {
     return `${protocol}//${loc.hostname}:8000/api/v1/fieldwork/${endpoint}`;
   }
   return `${protocol}//${loc.host}/api/v1/fieldwork/${endpoint}`;
+}
+
+function createAuthenticatedWebSocket(url: string): WebSocket {
+  const token = getAccessToken();
+  if (token && token !== "guest") {
+    return new WebSocket(url, ["bearer", token]);
+  }
+  return new WebSocket(url);
 }
 
 type Tab = "asr" | "hints" | "notes" | "image" | "file" | "camera" | "survey";
@@ -265,7 +274,7 @@ export default function FieldworkTools() {
   const connectFacialWS = useCallback(() => {
     if (facialWsRef.current?.readyState === WebSocket.OPEN) return;
     try {
-      const ws = new WebSocket(getWsUrl("facial"));
+      const ws = createAuthenticatedWebSocket(getWsUrl("facial"));
       facialWsRef.current = ws;
       ws.onopen = () => console.log("[FacialWS] Connected");
       ws.onmessage = (e) => {
@@ -467,7 +476,7 @@ export default function FieldworkTools() {
       });
       streamRef.current = stream;
 
-      const ws = new WebSocket(getWsUrl("asr/qwen"));
+      const ws = createAuthenticatedWebSocket(getWsUrl("asr/qwen"));
       ws.binaryType = "arraybuffer";
       wsRef.current = ws;
 

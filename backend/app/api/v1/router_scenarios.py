@@ -246,9 +246,9 @@ async def design_scenario_stream(
                 full.append(token)
                 yield f"data: {json.dumps({'token': token})}\n\n"
             yield "data: [DONE]\n\n"
-        except Exception as e:
-            logger.error(f"Scenario design stream error: {e}")
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        except Exception:
+            logger.exception("Scenario design stream error")
+            yield f"data: {json.dumps({'error': 'Scenario design failed'})}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

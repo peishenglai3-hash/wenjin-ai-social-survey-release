@@ -12,7 +12,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_ai_service, get_db, ensure_upload_dir
-from app.api.deps_auth import require_user, get_current_profile
+from app.api.deps_auth import (
+    accept_authenticated_websocket,
+    get_current_profile,
+    require_user,
+)
 from app.models.user import UserAccount
 from app.config import settings
 from app.models.survey import FieldNote, SurveyProject, SurveySession, UserProfile
@@ -455,7 +459,8 @@ async def export_session_notes(
 
 @router.websocket("/fieldwork/asr")
 async def fieldwork_asr_ws(ws: WebSocket):
-    await ws.accept()
+    if await accept_authenticated_websocket(ws) is None:
+        return
     asr = XunfeiASR()
     transcript_buffer: list[str] = []
 
@@ -475,9 +480,10 @@ async def fieldwork_asr_ws(ws: WebSocket):
         await asr.relay(ws, on_end_callback=on_end)
     except WebSocketDisconnect:
         pass
-    except Exception as e:
+    except Exception:
+        logger.exception("Xunfei ASR WebSocket failed")
         try:
-            await ws.send_text(json.dumps({"type": "error", "message": str(e)}))
+            await ws.send_text(json.dumps({"type": "error", "message": "ASR service unavailable"}))
         except Exception:
             logger.warning("Failed to send error to client", exc_info=True)
     finally:
@@ -491,7 +497,8 @@ async def fieldwork_asr_ws(ws: WebSocket):
 
 @router.websocket("/fieldwork/asr/qwen")
 async def fieldwork_asr_qwen_ws(ws: WebSocket):
-    await ws.accept()
+    if await accept_authenticated_websocket(ws) is None:
+        return
     asr = QwenRealtimeASR()
     transcript_buffer: list[str] = []
 
@@ -511,9 +518,10 @@ async def fieldwork_asr_qwen_ws(ws: WebSocket):
         await asr.relay(ws, on_end_callback=on_end)
     except WebSocketDisconnect:
         pass
-    except Exception as e:
+    except Exception:
+        logger.exception("Qwen ASR WebSocket failed")
         try:
-            await ws.send_text(json.dumps({"type": "error", "message": str(e)}))
+            await ws.send_text(json.dumps({"type": "error", "message": "ASR service unavailable"}))
         except Exception:
             logger.warning("Failed to send error to client", exc_info=True)
     finally:
@@ -816,6 +824,8 @@ async def fieldwork_pipeline_ws(ws: WebSocket):
 
     Server returns JSON: transcript segments, emotion_alerts, coach_hints, summaries.
     """
+    if await accept_authenticated_websocket(ws) is None:
+        return
     params = {}
     if '?' in str(ws.url):
         qs = str(ws.url).split('?')[-1]
@@ -832,7 +842,8 @@ async def fieldwork_facial_ws(ws: WebSocket):
 
     Uses the shared emotion_tracker singleton — coexists with /pipeline for bimodal fusion.
     """
-    await ws.accept()
+    if await accept_authenticated_websocket(ws) is None:
+        return
     session_id = f"facial_{int(time.time())}"
     emotion_tracker.start_session(session_id)
     logger.info(f"Facial WS session started: {session_id}")

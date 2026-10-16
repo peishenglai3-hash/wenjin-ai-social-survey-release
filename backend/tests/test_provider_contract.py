@@ -4,9 +4,12 @@ import pytest
 import httpx
 
 from app.api.deps import get_provider_registry
+from app.config import settings
 from app.main import app
 from app.providers import FakeProvider, OpenAICompatibleProvider, ProviderRegistry
-from app.providers.contracts import ProviderError
+from app.providers.contracts import ProviderError, ProviderManifest, ProviderResponse, ProviderUsage
+from app.models.open_api import OpenAPIUsageRecord
+from sqlalchemy import select
 
 
 @pytest.fixture
@@ -18,6 +21,12 @@ def fake_registry():
 
 
 class TestProviderContract:
+    def test_open_api_schema_has_no_client_credential_fields(self):
+        schema = app.openapi()
+        properties = schema["components"]["schemas"]["OpenAPIChatRequest"]["properties"]
+        assert "api_key" not in properties
+        assert "base_url" not in properties
+
     @pytest.mark.asyncio
     async def test_fake_provider_is_deterministic_and_streams(self, fake_registry):
         provider = fake_registry.get("fake")
@@ -66,7 +75,12 @@ class TestProviderContract:
         body = response.json()
         assert body["content"] == "deterministic answer"
         assert body["provider"] == "fake"
+        assert body["request_id"] == response.headers["X-Request-ID"]
+        assert body["quota_remaining_tokens"] is not None
         assert "api_key" not in response.text
+
+        usage = (await client.get("/api/v1/open-api/providers")).json()
+        assert usage["providers"][0]["id"] == "fake"
 
     @pytest.mark.asyncio
     async def test_open_api_project_context_is_owner_scoped(self, client, db_session, fake_registry):
@@ -146,3 +160,76 @@ class TestProviderContract:
         assert error.value.category == "upstream_rejected"
         assert "server-only-secret" not in str(error.value)
         assert "secret should not escape" not in str(error.value)
+
+
+@pytest.mark.asyncio
+async def test_open_api_records_metadata_only_and_enforces_quota(client, db_session, fake_registry, monkeypatch):
+    response = await client.post(
+        "/api/v1/open-api/chat/completions",
+        json={
+            "provider": "fake",
+            "messages": [{"role": "user", "content": "private prompt"}],
+        },
+    )
+    assert response.status_code == 200
+    record = (await db_session.execute(select(OpenAPIUsageRecord))).scalar_one()
+    assert record.total_tokens == 1
+    assert record.status == "success"
+    assert "private prompt" not in str(record.__dict__)
+
+    monkeypatch.setattr(settings, "open_api_daily_token_quota", 0)
+    blocked = await client.post(
+        "/api/v1/open-api/chat/completions",
+        json={
+            "provider": "fake",
+            "messages": [{"role": "user", "content": "blocked"}],
+        },
+    )
+    assert blocked.status_code == 429
+
+
+class _FlakyProvider:
+    manifest = ProviderManifest(
+        id="flaky",
+        label="Flaky test provider",
+        configured=True,
+        capabilities=("chat",),
+        default_model="test-model",
+    )
+
+    def __init__(self):
+        self.calls = 0
+
+    async def chat(self, messages, *, model=None, temperature=0.7, max_tokens=4096):
+        self.calls += 1
+        if self.calls == 1:
+            raise ProviderError("upstream_unavailable", "temporary", retryable=True)
+        return ProviderResponse(
+            provider="flaky",
+            model=model or "test-model",
+            content="retried",
+            usage=ProviderUsage(total_tokens=2),
+        )
+
+    async def chat_stream(self, messages, *, model=None, temperature=0.7, max_tokens=4096):
+        if False:
+            yield ""
+
+    async def health(self):
+        return True
+
+
+@pytest.mark.asyncio
+async def test_open_api_retries_only_retryable_provider_failures(client):
+    provider = _FlakyProvider()
+    app.dependency_overrides[get_provider_registry] = lambda: ProviderRegistry([provider])
+    try:
+        response = await client.post(
+            "/api/v1/open-api/chat/completions",
+            json={"provider": "flaky", "messages": [{"role": "user", "content": "hello"}]},
+        )
+    finally:
+        app.dependency_overrides.pop(get_provider_registry, None)
+    assert response.status_code == 200
+    assert response.json()["content"] == "retried"
+    assert provider.calls == 2

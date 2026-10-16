@@ -39,8 +39,10 @@ class OpenAPIUsage(BaseModel):
 class OpenAPIChatResponse(BaseModel):
     id: str
     object: Literal["chat.completion"] = "chat.completion"
+    request_id: str | None = None
     provider: str
     model: str
     content: str
     usage: OpenAPIUsage
+    quota_remaining_tokens: int | None = None
 

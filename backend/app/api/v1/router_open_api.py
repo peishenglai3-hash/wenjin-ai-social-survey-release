@@ -6,6 +6,8 @@ Project context is owner-scoped until collaboration membership reaches the
 shared research-artifact stage.
 """
 
+import asyncio
+import logging
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -16,10 +18,30 @@ from app.api.deps import get_db, get_provider_registry
 from app.api.deps_auth import get_current_profile
 from app.config import settings
 from app.models.survey import SurveyProject, UserProfile
+from app.middleware.request_context import get_request_id
 from app.providers.contracts import ProviderError, ProviderRegistry
 from app.schemas.open_api import OpenAPIChatRequest, OpenAPIChatResponse, OpenAPIUsage
+from app.services.open_api_usage import check_quota, record_usage
 
 router = APIRouter(prefix="/open-api", tags=["open-api"])
+logger = logging.getLogger(__name__)
+
+
+async def _chat_with_bounded_retry(provider, payload: OpenAPIChatRequest):
+    """Retry only provider-declared transient failures, with a hard attempt cap."""
+    attempts = max(0, min(settings.open_api_retry_attempts, 3))
+    for attempt in range(attempts + 1):
+        try:
+            return await provider.chat(
+                [message.model_dump() for message in payload.messages],
+                model=payload.model,
+                temperature=payload.temperature,
+                max_tokens=payload.max_tokens,
+            )
+        except ProviderError as exc:
+            if not exc.retryable or attempt >= attempts:
+                raise
+            await asyncio.sleep(min(1.0, settings.open_api_retry_backoff_s * (2**attempt)))
 
 
 @router.get("/providers")
@@ -57,15 +79,31 @@ async def create_chat_completion(
         if result.scalar_one_or_none() is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
+    _, used_tokens = await check_quota(db, profile.id, payload.max_tokens)
     try:
         provider = registry.get(payload.provider)
-        result = await provider.chat(
-            [message.model_dump() for message in payload.messages],
-            model=payload.model,
-            temperature=payload.temperature,
-            max_tokens=payload.max_tokens,
-        )
     except ProviderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=exc.detail,
+        ) from exc
+    selected_model = payload.model or provider.manifest.default_model
+    request_id = get_request_id()
+    try:
+        result = await _chat_with_bounded_retry(provider, payload)
+    except ProviderError as exc:
+        try:
+            await record_usage(
+                db,
+                profile_id=profile.id,
+                request_id=request_id,
+                provider=provider.manifest.id,
+                model=selected_model,
+                success=False,
+                error_category=exc.category,
+            )
+        except Exception:
+            logger.exception("Failed to record Open API provider failure")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE
             if exc.category in {"provider_unavailable", "timeout", "upstream_unavailable"}
@@ -73,8 +111,20 @@ async def create_chat_completion(
             detail=exc.detail,
         ) from exc
 
+    await record_usage(
+        db,
+        profile_id=profile.id,
+        request_id=request_id,
+        provider=result.provider,
+        model=result.model,
+        prompt_tokens=result.usage.prompt_tokens,
+        completion_tokens=result.usage.completion_tokens,
+        total_tokens=result.usage.total_tokens,
+    )
+
     return OpenAPIChatResponse(
         id=f"chatcmpl_{uuid4().hex}",
+        request_id=request_id,
         provider=result.provider,
         model=result.model,
         content=result.content,
@@ -82,6 +132,12 @@ async def create_chat_completion(
             prompt_tokens=result.usage.prompt_tokens,
             completion_tokens=result.usage.completion_tokens,
             total_tokens=result.usage.total_tokens,
+        ),
+        quota_remaining_tokens=max(
+            0,
+            settings.open_api_daily_token_quota
+            - used_tokens
+            - result.usage.total_tokens,
         ),
     )
 

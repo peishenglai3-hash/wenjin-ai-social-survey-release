@@ -1,6 +1,7 @@
 """Export endpoints — generate formatted documents from research content."""
 
 import json
+import logging
 import os
 import uuid
 from io import BytesIO
@@ -20,6 +21,7 @@ from app.services.export_service import generate_docx, generate_xlsx
 from app.skills.mode_prompts import get_mode_modifier
 
 router = APIRouter(tags=["export"])
+logger = logging.getLogger(__name__)
 
 # ── Reference file text extraction helpers ─────────────────────────
 
@@ -81,8 +83,9 @@ def extract_reference_text(filename: str, file_bytes: bytes) -> dict:
             return {"ok": False, "text": "", "error": "No extractable text found in file (possibly scanned PDF or empty file)"}
 
         return {"ok": True, "text": text, "error": None}
-    except Exception as e:
-        return {"ok": False, "text": "", "error": f"Text extraction failed: {str(e)}"}
+    except Exception:
+        logger.exception("Text extraction failed")
+        return {"ok": False, "text": "", "error": "Text extraction failed"}
 
 
 @router.post("/export/download-content")

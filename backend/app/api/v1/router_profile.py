@@ -595,6 +595,6 @@ async def extract_quick_keywords(
             "parse_error": True,
             "raw_response_snippet": raw[:200] if 'raw' in dir() else "",
         }
-    except Exception as e:
-        logger.error(f"Quick keywords AI service call failed: {e}")
-        return {"error": f"AI服务调用失败，请稍后重试。详情: {str(e)[:200]}"}
+    except Exception:
+        logger.exception("Quick keywords AI service call failed")
+        return {"error": "AI服务调用失败，请稍后重试。"}

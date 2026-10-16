@@ -61,9 +61,9 @@ async def analyze_image(
     active_ai = vision_ai if image_b64 else ai
     try:
         result = await skill.execute(active_ai, user_input, context=ctx)
-    except Exception as e:
-        logger.exception(f"Image analysis failed: {e}")
-        return {"error": f"Image analysis failed: {str(e)}"}
+    except Exception:
+        logger.exception("Image analysis failed")
+        return {"error": "Image analysis failed; please retry later"}
 
     meta = result.metadata or {}
     return {

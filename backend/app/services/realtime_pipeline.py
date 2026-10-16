@@ -40,7 +40,6 @@ class RealtimePipeline:
 
     async def handle(self, ws: WebSocket, session_id: str = "", scenario: str = "community_interview",
                      theme: str = "academic", phase: str = "opening") -> None:
-        await ws.accept()
         self._session_id = session_id or f"session_{int(time.time())}"
         self._scenario = scenario; self._theme = theme; self._phase = phase
         self._started_at = time.time()
@@ -59,9 +58,9 @@ class RealtimePipeline:
             await self._message_loop(ws)
         except WebSocketDisconnect:
             logger.info(f"Pipeline: client disconnected ({self._session_id})")
-        except Exception as e:
-            logger.exception(f"Pipeline error: {e}")
-            try: await ws.send_json({"type":"error","message":str(e)})
+        except Exception:
+            logger.exception("Pipeline error")
+            try: await ws.send_json({"type":"error","message":"Interview pipeline unavailable"})
             except Exception:
                 logger.warning("Failed to send error message to WebSocket", exc_info=True)
         finally:
@@ -182,9 +181,9 @@ class RealtimePipeline:
         except ws_lib.exceptions.InvalidStatus as e:
             logger.error(f"Qwen ASR WebSocket failed: {e}")
             await ws.send_json({"type": "error", "message": f"Qwen ASR connection failed (HTTP {e.response.status_code if hasattr(e, 'response') else '?'})"})
-        except Exception as e:
+        except Exception:
             logger.exception("Pipeline message loop error")
-            await ws.send_json({"type": "error", "message": str(e)})
+            await ws.send_json({"type": "error", "message": "Interview pipeline unavailable"})
 
     async def _summary_loop(self, ws: WebSocket) -> None:
         await asyncio.sleep(SUMMARY_INTERVAL_S)

@@ -43,6 +43,10 @@ V1 采用显式保存和成员关系，不实现实时共同编辑。首轮实�
 - `DELETE /projects/{project_id}/members/{member_id}`
 - `GET /projects/{project_id}/audit`
 
+## 安全与实时边界
+
+协作 API 只接受登录后的 access token；研究产物分享令牌只通过一次性响应返回，服务端保存摘要。田野实时 WebSocket 是独立的认证入口，不等同于实时协作编辑：客户端必须通过 `bearer` 子协议提交内存 access token，服务端不会从 URL 查询参数读取 token。
+
 ## 尚未实现
 
 删除/保留策略、分页、批量审核、跨项目审议和完整统一错误 envelope 尚未完成。现有旧单人核心路由仍保持 owner-scoped 语义，协作成员不会因为本模块启用而自动获得旧数据访问权；当前版本也不实现实时共同编辑。

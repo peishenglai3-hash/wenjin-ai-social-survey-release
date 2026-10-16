@@ -64,6 +64,8 @@ docker compose up --build
 
 Compose 配置只用于本地实验，backend 容器会先执行 `alembic upgrade head`；生产部署仍需要自行完成密钥管理、TLS、数据库备份、访问控制、限流、日志脱敏和数据删除流程。
 
+Compose 内部会把 Redis 地址改写为 `redis://redis:6379/0`，并等待 Redis/backend 健康检查通过后再启动依赖服务；Redis 和 PostgreSQL 端口默认只绑定到本机。若将 `DATABASE_URL` 改为 Compose 内的 PostgreSQL 地址，还应在自己的部署覆盖文件中让 backend 等待 `postgres` 健康检查，不要把本地实验配置直接当作生产编排。
+
 ## BYOK 与数据边界
 
 本项目采用后端 BYOK（Bring Your Own Key）边界：
@@ -73,7 +75,7 @@ Compose 配置只用于本地实验，backend 容器会先执行 `alembic upgrad
 3. 后端只把请求发送到已配置的供应商，并应避免记录原始 prompt、音频、图像和个人身份信息。
 4. 研究资料、访谈文本、音频、导出文件和数据库默认视为敏感数据；不要把真实田野数据提交到 Git。
 
-当前版本已提供受认证保护的协作成员/角色/邀请/审计元数据 API、窄范围的版本化 Open API provider contract，以及 WISE 提案/审批边界。Copilot 和反思产生的候选记忆先进入待审区，不能自动写入长期记忆。它仍不是完整的多租户协作系统：研究产物版本、批注、审核任务、脱敏分享、配额和第三方扩展隔离仍在后续阶段。知识卡片是可选的部署者数据，不随公开树提供。
+当前版本已提供受认证保护的协作成员/角色/邀请/审计元数据 API、研究产物版本/批注/审核/可撤销脱敏分享、窄范围的版本化 Open API provider contract，以及 WISE 提案/审批边界。Copilot 和反思产生的候选记忆先进入待审区，不能自动写入长期记忆。它仍不是完整的多租户协作系统：协作分页、批量审核、开放 API token 生命周期、流式公开端点和第三方扩展隔离仍在后续阶段。知识卡片是可选的部署者数据，不随公开树提供。田野工具的 WebSocket 入口要求通过 `bearer` 子协议发送内存 access token，不接受 URL 中的 token。
 
 ## 测试
 
@@ -98,7 +100,7 @@ npm test
 - [x] 研究项目成员、角色、邀请和元数据审计模型
 - [x] WISE 候选提案、人工审批、撤销和记忆写入门
 - [x] 研究产物版本、批注、审核任务和可撤销脱敏分享（删除/保留策略与分页仍待完成）
-- [ ] provider 配额、重试、webhook、最小 SDK 和第三方扩展隔离
+- [x] provider 配额、有限重试和运营审计；webhook、最小 SDK 和第三方扩展隔离仍待设计
 - [ ] 版本化 REST/OpenAPI、配额与 webhook
 - [ ] 可审计的第三方扩展机制和 typed SDK
 - [ ] 在合并前完成依赖、历史提交和发布包的独立复核

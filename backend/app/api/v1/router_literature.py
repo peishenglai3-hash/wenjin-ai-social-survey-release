@@ -14,6 +14,7 @@ GET  /api/v1/literature/citation-graph   — Citation graph data (nodes + edges)
 """
 import json
 import asyncio
+import logging
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -22,6 +23,7 @@ from app.services.literature_service import get_literature_service
 from app.services.vector_store import get_vector_store
 
 router = APIRouter(prefix="/literature", tags=["Literature Discovery"])
+logger = logging.getLogger(__name__)
 
 
 class SearchRequest(BaseModel):
@@ -155,8 +157,9 @@ async def literature_search_stream(
                 if count >= top_n:
                     break
             yield f"data: {json.dumps({'type':'done','total':count,'queries':queries}, ensure_ascii=False)}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'type':'error','message':str(e)}, ensure_ascii=False)}\n\n"
+        except Exception:
+            logger.exception("Literature search stream failed")
+            yield f"data: {json.dumps({'type':'error','message':'Literature search failed'}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

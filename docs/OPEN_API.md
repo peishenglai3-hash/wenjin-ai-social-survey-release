@@ -8,7 +8,10 @@
 - 请求体不接受 `api_key`、`base_url` 或任意上游 URL；未知字段会被拒绝。
 - 前端、浏览器存储、URL、响应、日志和项目审计事件不应出现 provider key。
 - 没有可用 provider 时，API 返回安全的 `503`，不会构造外部 HTTP client。
-- 项目上下文当前只允许项目 owner；协作成员对旧研究产物的共享读取/写入要等版本化产物与权限矩阵阶段完成。
+- 项目上下文当前只允许项目 owner；协作成员对旧单人研究产物仍不能越权，版本化协作产物使用独立的协作 API。
+- 每个 profile 有滚动 24 小时请求数和 token 配额；响应会给出 request ID 和剩余 token 估计值。配额记录只保存 provider/model/token/status 元数据，不保存 prompt 或模型输出。
+- 对 provider 明确标记为临时失败的错误最多做有限次数重试；拒绝类错误不重试，重试次数和退避由后端配置限制。
+- 配额检查是防御性滚动窗口检查，不是跨实例原子扣款；多副本部署仍应在网关或 Redis 层增加原子限额器。
 
 ## 已实现端点
 
@@ -52,12 +55,22 @@
 }
 ```
 
-响应是稳定的问津 envelope，包含 `provider`、`model`、文本和归一化 token usage；上游错误不会原样转发。
+响应是稳定的问津 envelope，包含 `request_id`、`provider`、`model`、文本、归一化 token usage 和配额剩余估计；上游错误不会原样转发。
 
 ## 本地 fake provider
 
 在离线开发或契约测试中可设置 `OPEN_API_FAKE_ENABLED=true`。它不访问网络，也不代表真实模型质量。生产部署应保持 `false`，并为自己的后端配置至少一个真实 provider key。
 
+## 已补充的运营边界
+
+- `OPEN_API_DAILY_REQUEST_QUOTA` 和 `OPEN_API_DAILY_TOKEN_QUOTA` 控制 profile 级滚动 24 小时预算。
+- `OPEN_API_RETRY_ATTEMPTS` 被硬限制在最多 3 次，退避时间也有上限；这不是无限重试或故障转移承诺。
+- `/api/v1/open-api/` 仍受 IP 滑动窗口限流；生产部署应使用 Redis，单进程内存 fallback 只适合开发/故障降级。
+
 ## 尚未纳入 V1
 
-配额账本、API token 生命周期、自动重试策略、webhook、SDK、流式公开端点、embedding/vision/transcribe 的统一 contract，以及第三方可执行扩展隔离仍需单独设计、测试和安全复核。
+API token 生命周期、webhook、SDK、流式公开端点、embedding/vision/transcribe 的统一 contract，以及第三方可执行扩展隔离仍需单独设计、测试和安全复核。
+
+## 客户端与 WebSocket 边界
+
+HTTP 客户端只需要登录后的问津 access token。田野实时 ASR、pipeline 和 facial WebSocket 入口使用浏览器可发送的 `Sec-WebSocket-Protocol: bearer, <access-token>` 协商方式；服务端只返回 `bearer` 子协议，拒绝缺失、过期或非 access token。不要把 token 拼到 WebSocket URL、日志或示例链接中。

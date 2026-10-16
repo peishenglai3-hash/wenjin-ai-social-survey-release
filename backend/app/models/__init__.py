@@ -11,6 +11,7 @@ from app.models.research_artifact import (
     ResearchShare,
 )
 from app.models.wise import WISEProposal
+from app.models.open_api import OpenAPIUsageRecord
 from app.models.survey import AnalysisResult, CodebookCode, CodebookVersion, CodingAssignment, ExportDocument, FieldNote, IterationInsight, KnowledgeCard, ReflectionSession, ResearchInterestProfile, ScenarioDesign, SurveyProject, SurveySession, UserMemory, UserProfile, UserSkill
 
 __all__ = [
@@ -29,6 +30,7 @@ __all__ = [
     "ResearchAnnotation",
     "ResearchReviewTask",
     "ResearchShare",
+    "OpenAPIUsageRecord",
     "UserProfile",
     "SurveyProject",
     "SurveySession",

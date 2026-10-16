@@ -117,9 +117,9 @@ class QwenRealtimeASR:
                     f"(HTTP {e.response.status_code if hasattr(e, 'response') else '?'})"
                 )
             }))
-        except Exception as e:
+        except Exception:
             logger.exception("Qwen ASR relay error")
-            await client_ws.send_text(json.dumps({"type": "error", "message": str(e)}))
+            await client_ws.send_text(json.dumps({"type": "error", "message": "ASR service unavailable"}))
 
         if on_end_callback:
             await on_end_callback("".join(full_transcript))

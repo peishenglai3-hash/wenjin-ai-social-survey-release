@@ -5,6 +5,7 @@ PIPL: data export and account deletion.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+import logging
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,6 +42,8 @@ from app.schemas.auth import (
     UserResponse,
     WechatLoginRequest,
 )
+
+logger = logging.getLogger(__name__)
 from app.services.sms_service import get_sms_service
 from app.services.orcid_service import exchange_code, get_authorize_url, decode_state_token
 
@@ -519,8 +522,9 @@ async def orcid_callback(code: str, state: str, db: AsyncSession = Depends(get_d
     # Exchange authorization code for ORCID iD
     try:
         orcid_data = await exchange_code(code)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError:
+        logger.exception("ORCID token exchange failed")
+        raise HTTPException(status_code=400, detail="ORCID authentication failed")
 
     orcid_id = orcid_data["orcid"]
     display_name = orcid_data.get("name", f"ORCID:{orcid_id[-8:]}")
@@ -624,8 +628,9 @@ async def bind_orcid(
     """Bind ORCID to the currently authenticated account."""
     try:
         orcid_data = await exchange_code(code)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError:
+        logger.exception("ORCID binding exchange failed")
+        raise HTTPException(status_code=400, detail="ORCID authentication failed")
 
     orcid_id = orcid_data["orcid"]
 
