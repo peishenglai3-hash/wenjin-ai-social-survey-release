@@ -33,6 +33,8 @@ from app.api.v1.router_scenarios import router as scenarios_router, public_route
 from app.api.v1.router_skills import router as skills_router
 from app.api.v1.router_topic import router as topic_router
 from app.api.v1.router_questionnaire import router as questionnaire_router
+from app.api.v1.router_open_api import router as open_api_router
+from app.api.v1.router_collaboration import router as collaboration_router
 from app.skills.fieldwork_coach import FieldworkCoachSkill
 from app.skills.image_analysis import ImageAnalysisSkill
 from app.skills.literature_review import LiteratureReviewSkill
@@ -76,6 +78,8 @@ protected_api_router.include_router(knowledge_router)
 protected_api_router.include_router(profile_router)
 protected_api_router.include_router(topic_router)
 protected_api_router.include_router(questionnaire_router)
+protected_api_router.include_router(open_api_router)
+protected_api_router.include_router(collaboration_router)
 protected_api_router.include_router(fieldwork_router)
 protected_api_router.include_router(image_router)
 protected_api_router.include_router(analysis_router)

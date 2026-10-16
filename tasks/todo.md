@@ -1,6 +1,6 @@
 # Wenjin 开源演进 V2 任务清单
 
-状态：实施中；阶段 0 基线与阶段 1 平台硬化进行中。
+状态：实施中；阶段 0 基线已完成，平台硬化与能力切片按阶段推进。
 
 ## 计划与基线
 
@@ -18,8 +18,8 @@
 ## 平台硬化
 
 - [ ] P1 配置、启动失败、错误 envelope、request ID 和日志脱敏。
-- [ ] P2 认证、CORS、JWT/token 存储、对象归属、上传和 SSRF 边界（认证 Cookie/摘要、离线队列隐私、编码/反射/场景及多组对象归属已完成第一轮，响应兼容字段、CORS、真实 PWA 验收、协作成员角色和全局上传生命周期仍待完成）。
-- [ ] P3 数据库迁移、SQLite/PostgreSQL、Redis 和 Compose 环境（Alembic drift 首个 revision 与显式迁移启动链已完成，已有库/PostgreSQL/健康依赖仍待验收）。
+- [ ] P2 认证、CORS、JWT/token 存储、对象归属、上传和 SSRF 边界（认证 Cookie/摘要、离线队列隐私、编码/反射/场景及多组对象归属已完成第一轮，响应兼容字段、CORS、真实 PWA 验收和全局上传生命周期仍待完成）。
+- [ ] P3 数据库迁移、SQLite/PostgreSQL、Redis 和 Compose 环境（问卷与协作迁移、Alembic drift 和显式迁移启动链已完成，已有库/PostgreSQL/健康依赖仍待验收）。
 - [ ] P4 CI lint/type/test/build/security/license/secret gates（已加入 compile、pip check、Alembic drift、diff whitespace 和高置信度 credential scan；lint、依赖漏洞、license、OpenAPI 与 Docker smoke 仍待完成）。
 
 ## 知识流水线
@@ -35,13 +35,13 @@
 
 - [ ] W1/W2 WISE 提案、审批、撤销、证据和记忆写入门。
 - [ ] W3 WISE/fake provider/提示注入/失败重试测试。
-- [ ] C1 协作项目、成员、角色、邀请和归属模型。
+- [x] C1 协作项目、成员、角色、邀请和归属模型（双用户拒绝测试已覆盖）。
 - [ ] C2 版本、批注、审核任务、审计事件、脱敏分享和删除策略。
-- [ ] C3 后端协作 API、权限矩阵、分页、幂等和错误契约。
+- [ ] C3 后端协作 API、权限矩阵、分页、幂等和错误契约（成员/邀请/角色/审计首轮 API 已完成，分页、统一 envelope 和竞态幂等仍待完成）。
 - [ ] C4 前端协作最小闭环和安全默认 feature flag。
 - [ ] C5 接口与浏览器 smoke，不实现实时共同编辑。
-- [ ] A1 provider contract、fake provider、capability manifest 和契约测试。
-- [ ] A2 OpenAI-compatible/DashScope server-side BYOK adapters。
+- [x] A1 provider contract、fake provider、capability manifest 和契约测试（无网络 fake 与错误边界已覆盖）。
+- [x] A2 OpenAI-compatible/DashScope server-side BYOK adapters（服务端 key、无 key fail-closed 和上游错误归一化已覆盖）。
 - [ ] A3 gateway scope、项目归属、限流、配额、重试、审计和 redaction。
 - [ ] A4 OpenAPI snapshot、最小 SDK、示例和兼容性文档。
 - [ ] A5 扩展执行隔离拒绝测试和安全边界说明。

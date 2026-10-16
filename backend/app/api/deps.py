@@ -7,6 +7,7 @@ from app.config import settings
 from app.core.database import get_db  # noqa: F401 — re-export for routers
 from app.services.ai import AIService
 from app.services.vision_qwen import QwenVisionService
+from app.providers import DashScopeProvider, FakeProvider, OpenAICompatibleProvider, ProviderRegistry
 
 
 @lru_cache
@@ -45,6 +46,31 @@ def get_vision_service():
         )
     # Fallback: return DeepSeek AIService for text-only analysis
     return get_ai_service()
+
+
+@lru_cache
+def get_provider_registry() -> ProviderRegistry:
+    """Build the allow-listed provider adapters from backend-only settings.
+
+    The registry deliberately omits unconfigured providers from selection while
+    retaining safe capability metadata for discovery.  No credential is ever
+    returned from this dependency or serialized by the API.
+    """
+    providers = [
+        OpenAICompatibleProvider(
+            api_key=settings.deepseek_api_key,
+            base_url=settings.deepseek_base_url,
+            model=settings.deepseek_model,
+        ),
+        DashScopeProvider(
+            api_key=settings.qwen_api_key,
+            base_url=settings.qwen_base_url,
+            model=settings.qwen_model,
+        ),
+    ]
+    if settings.open_api_fake_enabled:
+        providers.append(FakeProvider())
+    return ProviderRegistry(providers)
 
 
 def ensure_upload_dir() -> str:

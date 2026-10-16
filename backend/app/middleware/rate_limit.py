@@ -102,6 +102,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if any(p in path for p in [
             "/copilot/", "/topic/", "/analysis/", "/export/",
             "/skills/", "/fieldwork/hints", "/fieldwork/summarize",
+            "/open-api/",
         ]):
             return self.ai_rpm, "ai"
 

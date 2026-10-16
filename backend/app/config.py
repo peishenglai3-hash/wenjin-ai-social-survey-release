@@ -69,6 +69,14 @@ class Settings(BaseSettings):
     emotion_provider: str = "volcano"  # volcano | deepseek | qwen — multi-modal emotion LLM
     realtime_provider: str = "hunyuan"  # hunyuan | deepseek — hints, summarization, memory extraction
 
+    # Versioned Open API gateway.  Credentials remain server-side; the fake
+    # provider is opt-in for offline development and contract tests only.
+    open_api_enabled: bool = True
+    open_api_fake_enabled: bool = False
+    open_api_max_messages: int = 64
+    open_api_max_tokens: int = 8192
+    qwen_model: str = "qwen-plus"
+
     # ── Xunfei ASR (legacy fallback) ──
     xf_app_id: str = ""
     xf_api_key: str = ""

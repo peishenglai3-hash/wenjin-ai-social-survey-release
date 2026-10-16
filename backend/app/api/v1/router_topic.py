@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps_auth import get_current_profile
 from app.api.deps import get_ai_service, get_db
+from app.models.collaboration import ProjectMember
 from app.models.survey import SurveyProject, UserProfile
 from app.services.ai import AIService
 from app.skills.mode_prompts import get_mode_modifier, get_distilled_task_prompt, get_mode_task_config
@@ -425,6 +426,10 @@ async def create_project(
         status="draft",
     )
     db.add(project)
+    await db.flush()
+    # New projects carry an explicit owner row; the migration/helper backfills
+    # the same invariant for projects created before collaboration V1.
+    db.add(ProjectMember(project_id=project.id, profile_id=profile.id, role="owner", status="active"))
     await db.commit()
     await db.refresh(project)
     return {

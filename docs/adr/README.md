@@ -9,4 +9,5 @@
 - [ADR-0003：知识材料先审计、后导入运行时](0003-knowledge-audit-gate.md)
 - [ADR-0004：刷新令牌 Cookie 与前端内存令牌](0004-refresh-cookie-and-token-storage.md)
 - [ADR-0005：离线访谈草稿的隐私边界](0005-offline-transcript-privacy-boundary.md)
+- [ADR-0006：Open API V1 先固定窄 contract](0006-open-api-v1-contract.md)
 
