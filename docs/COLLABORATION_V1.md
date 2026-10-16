@@ -11,6 +11,27 @@ V1 采用显式保存和成员关系，不实现实时共同编辑。首轮实�
 - 项目级元数据审计事件；事件只记录 profile/id、动作和角色等元数据。
 - 双用户测试覆盖：非成员无法读取或管理他人项目，受邀用户可接受邀请并获得声明角色。
 
+## C2 已实现：显式研究产物协作
+
+- `research_artifacts`：项目内的产物键、类型和标题；旧的单人核心表不会被自动改成共享表。
+- `research_artifact_versions`：显式版本号、脱敏内容、内容哈希、变更说明和幂等键。
+- `research_annotations`：成员可以针对脱敏版本留下带可选字符范围的批注。
+- `research_review_tasks`：编辑请求审核，reviewer/editor/owner 按角色完成批准、退回修改或拒绝。
+- `research_shares`：只有已经批准且标记为 `redacted` 的版本可以创建短期分享；令牌只返回一次、数据库只保存摘要，解析令牌使用 POST body 而不是 URL。
+- 明显的邮箱、手机号、API key、Bearer token 和私钥标记会在版本/批注提交时被拒绝；这不是完整的隐私识别器，研究者仍需人工复核。
+
+对应接口在受认证的 `/api/v1/collaboration` 下：
+
+- `POST/GET /projects/{project_id}/artifacts`
+- `GET /artifacts/{artifact_id}`
+- `POST/GET /artifacts/{artifact_id}/versions`
+- `GET /versions/{version_id}`
+- `POST/GET /versions/{version_id}/annotations`
+- `POST/GET /versions/{version_id}/review-tasks`
+- `POST /review-tasks/{task_id}/decision`
+- `POST /versions/{version_id}/shares`
+- `POST /shares/resolve`、`POST /shares/{share_id}/revoke`
+
 端点位于受认证的 `/api/v1/collaboration` 下：
 
 - `GET /projects/{project_id}/members`
@@ -24,4 +45,4 @@ V1 采用显式保存和成员关系，不实现实时共同编辑。首轮实�
 
 ## 尚未实现
 
-研究产物版本、批注、审核任务、可撤销脱敏分享、删除/保留策略、分页和完整统一错误 envelope 尚未完成。现有旧单人核心路由仍保持 owner-scoped 语义，协作成员不会因为本模块启用而自动获得旧数据访问权。
+删除/保留策略、分页、批量审核、跨项目审议和完整统一错误 envelope 尚未完成。现有旧单人核心路由仍保持 owner-scoped 语义，协作成员不会因为本模块启用而自动获得旧数据访问权；当前版本也不实现实时共同编辑。
