@@ -41,6 +41,7 @@
 - 修复实时情绪/时间线的跨用户模块级状态泄漏；实时 pipeline、情绪 tracker 和时间线存储均按连接/用户隔离，并增加帧大小、消息速率和文本上限。
 - SMS 未配置或 provider 不可用时 fail-closed，不再生成、接受或记录可复用验证码；Open API 输入、分析属性、音频/转录和批量边界均有上限。
 - CI 已包含 `pip check`、compile、Alembic upgrade/check、diff whitespace 和高置信度凭据扫描。
+- 在线 npm audit 首轮发现 17 个前端依赖漏洞；已通过非强制修复更新 lockfile，并移除未被源码使用的 `sharp` 依赖，当前在线审计为 0 vulnerabilities。
 
 ### 知识、prompt 与 WISE
 
@@ -77,7 +78,7 @@
 | 前端 build | passed with warning | Vite build 成功；最大压缩 vendor chunk 约 1.29 MB |
 | 新协作文件 lint | passed | 协作页面/API/config 定向 ESLint 通过 |
 | 全前端 lint | passed | 0 errors、0 warnings；未关闭规则，未删除稳定功能 |
-| npm 依赖审计 | passed | `npm audit --offline --audit-level=high`：0 vulnerabilities |
+| npm 依赖审计 | passed | 在线 `npm audit --audit-level=high`：0 vulnerabilities；已移除未使用的 `sharp` |
 | 前端窄屏审计 | passed with boundary | 320px/768px 视口截图通过；后端未联机，API 404 不能当作集成通过 |
 | 当前树凭据扫描 | passed | 当前树及候选分支可达提交的高置信度模式未命中；不替代历史扫描和供应商侧轮换 |
 | Markdown 链接 | passed | 公开文档 inventory 覆盖 30 个 Markdown/README 文件，当前相对链接无缺失目标 |
@@ -89,7 +90,7 @@
 
 1. 知识候选的版权/再分发权、翻译质量、场域适配和伦理边界仍需人工批准；在此之前不能生成 `approved` manifest，也不能把原训练书籍/切片恢复到公开树。
 2. PostgreSQL + Redis、Docker Compose、真实浏览器/PWA、生产 HTTPS/CORS/CSP/HSTS 和上传保留清理还没有本机成功证据。
-3. Open API 配额代码已具备事务预留和 profile 锁，但仍需 PostgreSQL 多实例压测证据；后台直接创建 AI service 的异步任务仍需补充用户归属；完整数据导出/删除保留策略、DNS rebinding/SSRF 防护、依赖 lock/audit/SBOM 仍需部署级复核。
+3. Open API 配额代码已具备事务预留和 profile 锁，但仍需 PostgreSQL 多实例压测证据；后台直接创建 AI service 的异步任务仍需补充用户归属；完整数据导出/删除保留策略、DNS rebinding/SSRF 防护、Python 依赖 lock、SBOM 仍需部署级复核。
 5. 服务端 BYOK 已实现，但它仍是部署者后端环境配置，不是让浏览器把 provider key 直接交给公共 API；ORCID/技能市场的外部审查和完整 typed SDK、webhook、公共 streaming 仍不属于本候选完成范围。
 
 ## 6. 发布建议与回滚
