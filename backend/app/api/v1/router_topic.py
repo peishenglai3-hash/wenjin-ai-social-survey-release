@@ -9,6 +9,7 @@ from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps_auth import get_current_profile
 from app.api.deps import get_ai_service, get_db
 from app.models.survey import SurveyProject, UserProfile
 from app.services.ai import AIService
@@ -410,9 +411,13 @@ async def topic_questionnaire_download(payload: dict):
 # ── Project CRUD ─────────────────────────────────────────────────
 
 @router.post("/projects")
-async def create_project(payload: dict, db: AsyncSession = Depends(get_db)):
+async def create_project(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    profile: UserProfile = Depends(get_current_profile),
+):
     project = SurveyProject(
-        profile_id=payload.get("profile_id", 1),
+        profile_id=profile.id,
         title=payload.get("title", "未命名项目"),
         research_direction=payload.get("research_direction", ""),
         paradigm=payload.get("paradigm", "qualitative"),
@@ -434,8 +439,15 @@ async def create_project(payload: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/projects")
-async def list_projects(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(SurveyProject).order_by(SurveyProject.created_at.desc()))
+async def list_projects(
+    db: AsyncSession = Depends(get_db),
+    profile: UserProfile = Depends(get_current_profile),
+):
+    result = await db.execute(
+        select(SurveyProject)
+        .where(SurveyProject.profile_id == profile.id)
+        .order_by(SurveyProject.created_at.desc())
+    )
     projects = result.scalars().all()
     return {
         "projects": [
@@ -454,8 +466,17 @@ async def list_projects(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/projects/{project_id}")
-async def get_project(project_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(SurveyProject).where(SurveyProject.id == project_id))
+async def get_project(
+    project_id: int,
+    db: AsyncSession = Depends(get_db),
+    profile: UserProfile = Depends(get_current_profile),
+):
+    result = await db.execute(
+        select(SurveyProject).where(
+            SurveyProject.id == project_id,
+            SurveyProject.profile_id == profile.id,
+        )
+    )
     project = result.scalar_one_or_none()
     if not project:
         return {"error": "Project not found"}
@@ -476,8 +497,18 @@ async def get_project(project_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/projects/{project_id}")
-async def update_project(project_id: int, payload: dict, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(SurveyProject).where(SurveyProject.id == project_id))
+async def update_project(
+    project_id: int,
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    profile: UserProfile = Depends(get_current_profile),
+):
+    result = await db.execute(
+        select(SurveyProject).where(
+            SurveyProject.id == project_id,
+            SurveyProject.profile_id == profile.id,
+        )
+    )
     project = result.scalar_one_or_none()
     if not project:
         return {"error": "Project not found"}
