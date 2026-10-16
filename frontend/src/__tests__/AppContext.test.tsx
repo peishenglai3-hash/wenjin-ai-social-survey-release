@@ -8,6 +8,8 @@ vi.mock('../api/client', () => ({
     post: vi.fn(() => Promise.resolve({ data: {} })),
     get: vi.fn(() => Promise.resolve({ data: {} })),
   },
+  setAccessToken: vi.fn(),
+  getAccessToken: vi.fn(() => null),
 }))
 
 // Mock localStorage

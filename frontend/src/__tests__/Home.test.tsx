@@ -4,6 +4,17 @@ import { MemoryRouter } from 'react-router-dom'
 import { AppProvider } from '../context/AppContext'
 import Home from '../pages/Home'
 
+// The provider probes the HttpOnly refresh-cookie session on mount. Keep this
+// page unit test hermetic instead of waiting for a real backend.
+vi.mock('../api/client', () => ({
+  default: {
+    post: vi.fn(() => Promise.reject(new Error('no test session'))),
+    get: vi.fn(() => Promise.reject(new Error('no test session'))),
+  },
+  setAccessToken: vi.fn(),
+  getAccessToken: vi.fn(() => null),
+}))
+
 const mockFetch = vi.fn()
 globalThis.fetch = mockFetch
 

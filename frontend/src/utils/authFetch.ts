@@ -5,15 +5,14 @@
  * API calls, use api/client.ts which already has interceptors.
  */
 
+import { getAccessToken } from "../api/client";
+
 function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  try {
-    const saved = localStorage.getItem("wenjin_auth");
-    if (saved) {
-      const { access_token } = JSON.parse(saved);
-      if (access_token) headers["Authorization"] = `Bearer ${access_token}`;
-    }
-  } catch { /* ignore */ }
+  const accessToken = getAccessToken();
+  if (accessToken && accessToken !== "guest") {
+    headers["Authorization"] = `Bearer ${accessToken}`;
+  }
   return headers;
 }
 
@@ -28,6 +27,7 @@ export async function authFetch(
   const authHeaders = getAuthHeaders();
   return fetch(url, {
     ...options,
+    credentials: "include",
     headers: {
       ...authHeaders,
       ...(options.headers as Record<string, string> || {}),

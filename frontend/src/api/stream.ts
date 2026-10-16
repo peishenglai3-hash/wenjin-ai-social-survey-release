@@ -2,6 +2,7 @@
  *  Accepts an optional AbortSignal for cancellation. */
 
 import config from "../config";
+import { getAccessToken } from "./client";
 
 export async function streamAI(
   endpoint: string,
@@ -14,20 +15,17 @@ export async function streamAI(
   const base = config.apiBaseUrl || "";
   const url = `${base}/api/v1${endpoint}`;
 
-  // Read auth token from localStorage for SSE requests
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  try {
-    const saved = localStorage.getItem("wenjin_auth");
-    if (saved) {
-      const { access_token } = JSON.parse(saved);
-      if (access_token) headers["Authorization"] = `Bearer ${access_token}`;
-    }
-  } catch { /* ignore */ }
+  const accessToken = getAccessToken();
+  if (accessToken && accessToken !== "guest") {
+    headers["Authorization"] = `Bearer ${accessToken}`;
+  }
 
   try {
     const resp = await fetch(url, {
       method: "POST",
       headers,
+      credentials: "include",
       body: JSON.stringify(body),
       signal,
     });

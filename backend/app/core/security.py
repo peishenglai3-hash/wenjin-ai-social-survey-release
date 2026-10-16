@@ -4,6 +4,7 @@ Uses python-jose for JWT and passlib for bcrypt password hashing.
 """
 
 from datetime import datetime, timedelta, timezone
+import secrets
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -46,6 +47,7 @@ def create_refresh_token(user_id: int, email: str) -> str:
         "sub": str(user_id),
         "email": email,
         "type": "refresh",
+        "jti": secrets.token_urlsafe(16),
         "exp": expire,
         "iat": datetime.now(timezone.utc),
     }

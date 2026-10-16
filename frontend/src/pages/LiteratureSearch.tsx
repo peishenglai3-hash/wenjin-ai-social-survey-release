@@ -9,6 +9,7 @@
  */
 import { useState, useCallback, useEffect } from "react";
 import config from "../config";
+import { getAccessToken } from "../api/client";
 import Skeleton from "../components/Skeleton";
 import ErrorState from "../components/ErrorState";
 import CitationGraph from "../components/CitationGraph";
@@ -111,10 +112,8 @@ export default function LiteratureSearch() {
 
   /* ── Helper: get auth header ────────────────────── */
   const authHeaders = useCallback((): Record<string, string> => {
-    const token = localStorage.getItem("wenjin_auth");
-    let at: string | null = null;
-    try { const t = token ? JSON.parse(token) : null; at = t?.access_token; } catch {}
-    return at ? { Authorization: `Bearer ${at}` } : {};
+    const at = getAccessToken();
+    return at && at !== "guest" ? { Authorization: `Bearer ${at}` } : {};
   }, []);
 
   /* ── Search ──────────────────────────────────────── */

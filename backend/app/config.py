@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
+    refresh_cookie_name: str = "wenjin_refresh"
+    # Local HTTP development may need False; production deployments must set True.
+    refresh_cookie_secure: bool = False
+    refresh_cookie_samesite: str = "lax"
 
     # Rate Limiting (per-IP limits)
     rate_limit_enabled: bool = True

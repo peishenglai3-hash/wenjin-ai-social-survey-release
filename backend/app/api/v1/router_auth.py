@@ -4,7 +4,7 @@ Multi-method auth: email+password, phone+SMS, WeChat OAuth.
 PIPL: data export and account deletion.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,7 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
+from app.core.refresh_tokens import hash_refresh_token, matches_refresh_token
 from app.models.user import UserAccount, UserAuthMethod
 from app.models.survey import UserProfile
 from app.schemas.auth import (
@@ -44,6 +45,34 @@ from app.services.sms_service import get_sms_service
 from app.services.orcid_service import exchange_code, get_authorize_url, decode_state_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _store_refresh_token(user: UserAccount, token: str) -> None:
+    """Persist only a keyed digest; never store the raw refresh JWT."""
+
+    user.refresh_token = hash_refresh_token(token)
+
+
+def _set_refresh_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=settings.refresh_cookie_name,
+        value=token,
+        max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
+        httponly=True,
+        secure=settings.refresh_cookie_secure,
+        samesite=settings.refresh_cookie_samesite,
+        path="/api/v1/auth",
+    )
+
+
+def _clear_refresh_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=settings.refresh_cookie_name,
+        httponly=True,
+        secure=settings.refresh_cookie_secure,
+        samesite=settings.refresh_cookie_samesite,
+        path="/api/v1/auth",
+    )
 
 
 # ═══════════════════════════════════════════════
@@ -105,7 +134,11 @@ async def register(body: UserRegisterRequest, db: AsyncSession = Depends(get_db)
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(body: UserLoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(
+    body: UserLoginRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
     """Login with email and password, receive JWT tokens."""
     result = await db.execute(
         select(UserAccount).where(UserAccount.email == body.email)
@@ -124,8 +157,9 @@ async def login(body: UserLoginRequest, db: AsyncSession = Depends(get_db)):
 
     access_token = create_access_token(user.id, user.email)
     refresh_token = create_refresh_token(user.id, user.email)
-    user.refresh_token = refresh_token
+    _store_refresh_token(user, refresh_token)
     await db.commit()
+    _set_refresh_cookie(response, refresh_token)
 
     return TokenResponse(
         access_token=access_token,
@@ -165,7 +199,11 @@ async def send_sms(body: SendSmsRequest):
 
 
 @router.post("/login/phone", response_model=TokenResponse)
-async def login_phone(body: PhoneLoginRequest, db: AsyncSession = Depends(get_db)):
+async def login_phone(
+    body: PhoneLoginRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
     """Login with phone number + SMS verification code."""
     sms = get_sms_service()
     if not sms.verify_code(body.phone, body.sms_code):
@@ -191,8 +229,9 @@ async def login_phone(body: PhoneLoginRequest, db: AsyncSession = Depends(get_db
 
     access_token = create_access_token(user.id, user.email)
     refresh_token = create_refresh_token(user.id, user.email)
-    user.refresh_token = refresh_token
+    _store_refresh_token(user, refresh_token)
     await db.commit()
+    _set_refresh_cookie(response, refresh_token)
 
     return TokenResponse(
         access_token=access_token,
@@ -296,10 +335,23 @@ async def bind_phone(
 # ═══════════════════════════════════════════════
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
+async def refresh(
+    request: Request,
+    response: Response,
+    body: RefreshRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+):
     """Use a refresh token to get a new access token."""
+    presented_token = (body.refresh_token if body else None) or request.cookies.get(
+        settings.refresh_cookie_name
+    )
+    if not presented_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token required",
+        )
     try:
-        payload = decode_token(body.refresh_token)
+        payload = decode_token(presented_token)
         if payload.get("type") != "refresh":
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -316,7 +368,7 @@ async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
         select(UserAccount).where(UserAccount.id == user_id)
     )
     user = result.scalar_one_or_none()
-    if user is None or user.refresh_token != body.refresh_token:
+    if user is None or not matches_refresh_token(user.refresh_token, presented_token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token revoked",
@@ -324,8 +376,9 @@ async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
 
     new_access = create_access_token(user.id, user.email)
     new_refresh = create_refresh_token(user.id, user.email)
-    user.refresh_token = new_refresh
+    _store_refresh_token(user, new_refresh)
     await db.commit()
+    _set_refresh_cookie(response, new_refresh)
 
     return TokenResponse(
         access_token=new_access,
@@ -335,12 +388,14 @@ async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/logout")
 async def logout(
+    response: Response,
     user: UserAccount = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Logout — revoke the refresh token."""
     user.refresh_token = None
     await db.commit()
+    _clear_refresh_cookie(response)
     return {"status": "ok"}
 
 
@@ -529,7 +584,11 @@ async def orcid_callback(code: str, state: str, db: AsyncSession = Depends(get_d
 
 
 @router.post("/orcid/exchange", response_model=TokenResponse)
-async def orcid_exchange(body: OrcidExchangeRequest, db: AsyncSession = Depends(get_db)):
+async def orcid_exchange(
+    body: OrcidExchangeRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
     """Exchange a short-lived auth_code (from /auth/orcid/callback redirect)
     for JWT access + refresh tokens."""
     import time
@@ -549,8 +608,9 @@ async def orcid_exchange(body: OrcidExchangeRequest, db: AsyncSession = Depends(
 
     access_token = create_access_token(user.id, user.email)
     refresh_token = create_refresh_token(user.id, user.email)
-    user.refresh_token = refresh_token
+    _store_refresh_token(user, refresh_token)
     await db.commit()
+    _set_refresh_cookie(response, refresh_token)
 
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 

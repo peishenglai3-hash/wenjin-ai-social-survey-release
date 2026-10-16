@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
-import api from "../api/client";
+import api, { setAccessToken as setClientAccessToken } from "../api/client";
 
 interface UserProfile {
   id: number;
@@ -65,30 +65,6 @@ interface AuthState {
   refreshToken: () => Promise<boolean>;
   orcidLogin: () => Promise<void>;
   orcidExchange: (authCode: string) => Promise<void>;
-}
-
-const AUTH_STORAGE_KEY = "wenjin_auth";
-
-function loadAuthFromStorage(): { access_token: string | null; refresh_token: string | null } {
-  try {
-    const saved = localStorage.getItem(AUTH_STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return {
-        access_token: parsed.access_token || null,
-        refresh_token: parsed.refresh_token || null,
-      };
-    }
-  } catch { /* ignore */ }
-  return { access_token: null, refresh_token: null };
-}
-
-function saveAuthToStorage(access_token: string | null, refresh_token: string | null) {
-  if (access_token && refresh_token) {
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ access_token, refresh_token }));
-  } else {
-    localStorage.removeItem(AUTH_STORAGE_KEY);
-  }
 }
 
 interface AppState extends AuthState {
@@ -160,8 +136,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<string>(getInitialTheme);
 
   // ── Auth state ──────────────────────────────────────────
-  const [access_token, setAccessToken] = useState<string | null>(() => loadAuthFromStorage().access_token);
-  const [refresh_token, setRefreshToken] = useState<string | null>(() => loadAuthFromStorage().refresh_token);
+  const [access_token, setAccessToken] = useState<string | null>(null);
+  // Refresh tokens are HttpOnly cookies; keep this field only for API shape compatibility.
+  const refresh_token: string | null = null;
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
@@ -169,51 +146,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Validate stored token on mount
   useEffect(() => {
-    const stored = loadAuthFromStorage();
-    if (stored.access_token) {
-      api.get("/auth/me", {
-        headers: { Authorization: `Bearer ${stored.access_token}` },
-      })
-        .then((res) => {
-          setUser(res.data);
-        })
-        .catch(async () => {
-          // Try refresh
-          if (stored.refresh_token) {
-            try {
-              const resp = await api.post("/auth/refresh", { refresh_token: stored.refresh_token });
-              const { access_token: at, refresh_token: rt } = resp.data;
-              setAccessToken(at);
-              setRefreshToken(rt);
-              saveAuthToStorage(at, rt);
-              const me = await api.get("/auth/me", {
-                headers: { Authorization: `Bearer ${at}` },
-              });
-              setUser(me.data);
-            } catch {
-              // Refresh failed — clear auth
-              saveAuthToStorage(null, null);
-              setAccessToken(null);
-              setRefreshToken(null);
-            }
-          } else {
-            saveAuthToStorage(null, null);
-            setAccessToken(null);
-            setRefreshToken(null);
-          }
-        })
-        .finally(() => setIsAuthLoading(false));
-    } else {
-      setIsAuthLoading(false);
-    }
+    const bootstrapSession = async () => {
+      // One-time migration path for clients that still have a legacy token pair.
+      let legacyRefreshToken: string | undefined;
+      try {
+        const saved = localStorage.getItem("wenjin_auth");
+        if (saved) legacyRefreshToken = JSON.parse(saved).refresh_token || undefined;
+      } catch { /* ignore malformed legacy state */ }
+
+      try {
+        const resp = await api.post(
+          "/auth/refresh",
+          legacyRefreshToken ? { refresh_token: legacyRefreshToken } : {},
+        );
+        const at = resp.data.access_token as string;
+        setAccessToken(at);
+        setClientAccessToken(at);
+        const me = await api.get("/auth/me", {
+          headers: { Authorization: `Bearer ${at}` },
+        });
+        setUser(me.data);
+      } catch {
+        setAccessToken(null);
+        setClientAccessToken(null);
+      } finally {
+        localStorage.removeItem("wenjin_auth");
+        setIsAuthLoading(false);
+      }
+    };
+    void bootstrapSession();
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     const resp = await api.post("/auth/login", { email, password });
-    const { access_token: at, refresh_token: rt } = resp.data;
+    const { access_token: at } = resp.data;
     setAccessToken(at);
-    setRefreshToken(rt);
-    saveAuthToStorage(at, rt);
+    setClientAccessToken(at);
     const me = await api.get("/auth/me", {
       headers: { Authorization: `Bearer ${at}` },
     });
@@ -250,13 +218,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
     setUser(guestUser);
     setAccessToken("guest");
-    setRefreshToken(null);
+    setClientAccessToken(null);
     // Guest session — stored separately from auth tokens
     localStorage.setItem("wenjin_guest", JSON.stringify({
       guestId, displayName: guestUser.display_name, createdAt: new Date().toISOString(),
     }));
-    // Clear any stale auth
-    saveAuthToStorage(null, null);
   }, []);
   const sendSmsCode = useCallback(async (
     phone: string,
@@ -272,10 +238,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const loginPhone = useCallback(async (phone: string, sms_code: string) => {
     const resp = await api.post("/auth/login/phone", { phone, sms_code });
-    const { access_token: at, refresh_token: rt } = resp.data;
+    const { access_token: at } = resp.data;
     setAccessToken(at);
-    setRefreshToken(rt);
-    saveAuthToStorage(at, rt);
+    setClientAccessToken(at);
     const me = await api.get("/auth/me", {
       headers: { Authorization: `Bearer ${at}` },
     });
@@ -302,31 +267,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     // Fire-and-forget to revoke server-side refresh token
-    if (access_token) {
-      api.post("/auth/logout", null, {
-        headers: { Authorization: `Bearer ${access_token}` },
-      }).catch(() => {});
-    }
+    void api.post("/auth/logout").catch(() => {});
     setAccessToken(null);
-    setRefreshToken(null);
+    setClientAccessToken(null);
     setUser(null);
-    saveAuthToStorage(null, null);
-  }, [access_token]);
+    localStorage.removeItem("wenjin_auth");
+  }, []);
 
   const refreshToken = useCallback(async (): Promise<boolean> => {
-    if (!refresh_token) return false;
     try {
-      const resp = await api.post("/auth/refresh", { refresh_token });
-      const { access_token: at, refresh_token: rt } = resp.data;
+      const resp = await api.post("/auth/refresh", {});
+      const { access_token: at } = resp.data;
       setAccessToken(at);
-      setRefreshToken(rt);
-      saveAuthToStorage(at, rt);
+      setClientAccessToken(at);
       return true;
     } catch {
       logout();
       return false;
     }
-  }, [refresh_token, logout]);
+  }, [logout]);
 
   // ── ORCID OAuth ──────────────────────────────────────────
   const orcidLogin = useCallback(async () => {
@@ -341,20 +300,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const orcidExchange = useCallback(async (authCode: string) => {
     const resp = await api.post("/auth/orcid/exchange", { auth_code: authCode });
-    const { access_token: at, refresh_token: rt } = resp.data;
+    const { access_token: at } = resp.data;
     setAccessToken(at);
-    setRefreshToken(rt);
-    saveAuthToStorage(at, rt);
+    setClientAccessToken(at);
     const me = await api.get("/auth/me", {
       headers: { Authorization: `Bearer ${at}` },
     });
     setUser(me.data);
   }, []);
-
-  // Sync auth tokens to localStorage whenever they change
-  useEffect(() => {
-    saveAuthToStorage(access_token, refresh_token);
-  }, [access_token, refresh_token]);
 
   const setTheme = (t: string) => {
     setThemeState(t);

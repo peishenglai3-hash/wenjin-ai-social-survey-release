@@ -4,7 +4,20 @@ import config from "../config";
 const api = axios.create({
   baseURL: `${config.apiBaseUrl}/api/v1`,
   timeout: 120000,
+  withCredentials: true,
 });
+
+// Access tokens live only in memory. Refresh tokens are kept in an HttpOnly
+// cookie by the backend and are never read by JavaScript.
+let inMemoryAccessToken: string | null = null;
+
+export function setAccessToken(token: string | null): void {
+  inMemoryAccessToken = token;
+}
+
+export function getAccessToken(): string | null {
+  return inMemoryAccessToken;
+}
 
 // ── 401 Refresh Queue ─────────────────────────────────────
 let isRefreshing = false;
@@ -14,11 +27,7 @@ let failedQueue: Array<{
 }> = [];
 
 function getToken(): string | null {
-  try {
-    const saved = localStorage.getItem("wenjin_auth");
-    if (saved) return JSON.parse(saved).access_token || null;
-  } catch { /* ignore */ }
-  return null;
+  return inMemoryAccessToken;
 }
 
 function processQueue(error: any, token: string | null = null) {
@@ -55,18 +64,6 @@ api.interceptors.response.use(
       !originalRequest.url?.includes("/auth/register") &&
       !originalRequest.url?.includes("/auth/refresh")
     ) {
-      // Try to get the refresh token from storage
-      let storedRefreshToken: string | null = null;
-      try {
-        const saved = localStorage.getItem("wenjin_auth");
-        if (saved) storedRefreshToken = JSON.parse(saved).refresh_token || null;
-      } catch { /* ignore */ }
-
-      if (!storedRefreshToken) {
-        // No refresh token — just reject
-        return Promise.reject(err);
-      }
-
       if (isRefreshing) {
         // Queue this request until refresh completes
         return new Promise<string>((resolve, reject) => {
@@ -85,21 +82,18 @@ api.interceptors.response.use(
       try {
         const resp = await axios.post(
           `${config.apiBaseUrl}/api/v1/auth/refresh`,
-          { refresh_token: storedRefreshToken },
+          {},
+          { withCredentials: true },
         );
-        const { access_token: newAccess, refresh_token: newRefresh } = resp.data;
-        // Update storage
-        localStorage.setItem(
-          "wenjin_auth",
-          JSON.stringify({ access_token: newAccess, refresh_token: newRefresh }),
-        );
+        const { access_token: newAccess } = resp.data;
+        setAccessToken(newAccess);
         processQueue(null, newAccess);
         originalRequest.headers.Authorization = `Bearer ${newAccess}`;
         return api(originalRequest);
       } catch (refreshErr) {
         processQueue(refreshErr, null);
         // Clear auth — force re-login
-        localStorage.removeItem("wenjin_auth");
+        setAccessToken(null);
         return Promise.reject(refreshErr);
       } finally {
         isRefreshing = false;
