@@ -166,7 +166,6 @@ async def login(
 
     return TokenResponse(
         access_token=access_token,
-        refresh_token=refresh_token,
     )
 
 
@@ -238,7 +237,6 @@ async def login_phone(
 
     return TokenResponse(
         access_token=access_token,
-        refresh_token=refresh_token,
     )
 
 
@@ -385,7 +383,6 @@ async def refresh(
 
     return TokenResponse(
         access_token=new_access,
-        refresh_token=new_refresh,
     )
 
 
@@ -616,7 +613,7 @@ async def orcid_exchange(
     await db.commit()
     _set_refresh_cookie(response, refresh_token)
 
-    return TokenResponse(access_token=access_token, refresh_token=refresh_token)
+    return TokenResponse(access_token=access_token)
 
 
 @router.post("/bind/orcid")

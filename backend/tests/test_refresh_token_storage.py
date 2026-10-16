@@ -54,11 +54,13 @@ async def test_refresh_cookie_rotates_and_stores_only_digest(db_session):
         db=db_session,
     )
 
-    assert result.refresh_token
-    assert result.refresh_token != user.refresh_token
-    assert user.refresh_token == hash_refresh_token(result.refresh_token)
-    assert presented not in user.refresh_token
+    assert result.access_token
+    assert not hasattr(result, "refresh_token")
     set_cookie = response.headers["set-cookie"]
+    rotated = set_cookie.split(f"{settings.refresh_cookie_name}=", 1)[1].split(";", 1)[0]
+    assert rotated != presented
+    assert user.refresh_token == hash_refresh_token(rotated)
+    assert presented not in user.refresh_token
     assert f"{settings.refresh_cookie_name}=" in set_cookie
     assert "HttpOnly" in set_cookie
 
@@ -85,8 +87,12 @@ async def test_legacy_plaintext_refresh_token_is_upgraded(db_session):
         db=db_session,
     )
 
-    assert result.refresh_token != presented
-    assert user.refresh_token == hash_refresh_token(result.refresh_token)
+    assert result.access_token
+    assert not hasattr(result, "refresh_token")
+    set_cookie = response.headers["set-cookie"]
+    rotated = set_cookie.split(f"{settings.refresh_cookie_name}=", 1)[1].split(";", 1)[0]
+    assert rotated != presented
+    assert user.refresh_token == hash_refresh_token(rotated)
     assert await db_session.scalar(
         select(UserAccount.refresh_token).where(UserAccount.id == user.id)
     ) != presented

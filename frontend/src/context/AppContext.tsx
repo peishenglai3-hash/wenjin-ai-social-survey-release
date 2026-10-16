@@ -52,7 +52,6 @@ interface AuthUser {
 
 interface AuthState {
   access_token: string | null;
-  refresh_token: string | null;
   user: AuthUser | null;
   isAuthenticated: boolean;
   isAuthLoading: boolean;
@@ -86,7 +85,6 @@ const AppCtx = createContext<AppState>({
   setTheme: () => {},
   // Auth defaults
   access_token: null,
-  refresh_token: null,
   user: null,
   isAuthenticated: false,
   isAuthLoading: true,
@@ -138,8 +136,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ── Auth state ──────────────────────────────────────────
   const [access_token, setAccessToken] = useState<string | null>(null);
-  // Refresh tokens are HttpOnly cookies; keep this field only for API shape compatibility.
-  const refresh_token: string | null = null;
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
@@ -369,7 +365,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppCtx.Provider value={{
       profile, setProfile, project, setProject, theme, setTheme,
-      access_token, refresh_token, user, isAuthenticated, isAuthLoading,
+      access_token, user, isAuthenticated, isAuthLoading,
       login, loginPhone, loginGuest, register, registerPhone, sendSmsCode, logout, refreshToken,
       orcidLogin, orcidExchange,
     }}>

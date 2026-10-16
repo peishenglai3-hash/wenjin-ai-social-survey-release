@@ -13,7 +13,7 @@
 1. 后端只把 refresh token 的 HMAC-SHA256 摘要写入数据库；旧的明文值只在一次成功轮换时兼容并升级为摘要。
 2. refresh token 通过 `HttpOnly` Cookie 传递，Cookie 路径限制为 `/api/v1/auth`，并使用配置化的 `SameSite`、`Secure` 和过期时间。生产环境必须设置 `REFRESH_COOKIE_SECURE=true`，本地明文 HTTP 开发环境才允许保持 false。
 3. 前端 access token 只驻留模块内存，不再持久化到 `localStorage`；Axios、原生 fetch 和 SSE 统一使用内存令牌，并在需要时携带 Cookie。
-4. 旧版 `wenjin_auth` 仅用于一次迁移：启动时尝试交换其中的 refresh token，随后无论成功与否都删除该键。响应中保留的 refresh 字段仅作为当前过渡期 API 兼容字段，前端不得读取或持久化；后续公开 API 契约将评估移除原文响应。
+4. 旧版 `wenjin_auth` 仅用于一次迁移：启动时尝试交换其中的 refresh token，随后无论成功与否都删除该键。公开 token 响应只返回 access token；refresh token 只通过 HttpOnly Cookie 传递，旧客户端必须迁移。
 5. 登录、刷新、ORCID 交换都会轮换 refresh token；刷新 token 增加随机 `jti`，避免同秒生成相同 token。退出会撤销服务端记录并清理 Cookie。
 
 ## 后果
