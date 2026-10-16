@@ -95,24 +95,47 @@ async def start_reflection(
     # Fetch project if provided
     project_data = None
     if project_id:
-        row = await db.execute(select(SurveyProject).where(SurveyProject.id == int(project_id)))
+        try:
+            project_id = int(project_id)
+        except (TypeError, ValueError):
+            return {"error": "Project not found"}
+        row = await db.execute(
+            select(SurveyProject).where(
+                SurveyProject.id == project_id,
+                SurveyProject.profile_id == profile.id,
+            )
+        )
         proj = row.scalar_one_or_none()
-        if proj:
-            project_data = {
-                "title": proj.title,
-                "research_direction": proj.research_direction,
-                "phase": proj.phase,
-                "paradigm": proj.paradigm,
-            }
+        if proj is None:
+            return {"error": "Project not found"}
+        project_data = {
+            "title": proj.title,
+            "research_direction": proj.research_direction,
+            "phase": proj.phase,
+            "paradigm": proj.paradigm,
+        }
 
     # Fetch source context if provided
     source_context = payload.get("extra_context", "")
     if source_session_id:
+        try:
+            source_session_id = int(source_session_id)
+        except (TypeError, ValueError):
+            return {"error": "Survey session not found"}
         row = await db.execute(
-            select(SurveySession).where(SurveySession.id == int(source_session_id))
+            select(SurveySession)
+            .join(SurveyProject, SurveyProject.id == SurveySession.project_id)
+            .where(
+                SurveySession.id == source_session_id,
+                SurveyProject.profile_id == profile.id,
+            )
         )
         session = row.scalar_one_or_none()
-        if session and session.transcript_text:
+        if session is None:
+            return {"error": "Survey session not found"}
+        if project_id and session.project_id != project_id:
+            return {"error": "Survey session not found"}
+        if session.transcript_text:
             source_context += f"\n\n调查会话内容摘要：{session.transcript_text[:500]}"
             if session.summary_text:
                 source_context += f"\n\nAI生成的摘要：{session.summary_text[:500]}"
@@ -168,6 +191,7 @@ async def start_reflection(
 @router.post("/respond")
 async def respond_to_reflection(
     payload: dict,
+    profile: UserProfile = Depends(get_current_profile),
     ai: AIService = Depends(get_ai_service),
 ):
     """Answer the current reflection question and receive the next one
@@ -187,6 +211,8 @@ async def respond_to_reflection(
         return {"error": "answer is required"}
 
     session_state = _active_sessions[session_id]
+    if session_state.get("profile_id") != profile.id:
+        return {"error": "Session not found or expired. Please start a new reflection."}
 
     updated = await ReflectionService.process_answer(
         session_state=session_state,
@@ -218,6 +244,7 @@ async def respond_to_reflection(
 @router.post("/conclude")
 async def conclude_reflection(
     payload: dict,
+    profile: UserProfile = Depends(get_current_profile),
     ai: AIService = Depends(get_ai_service),
     db: AsyncSession = Depends(get_db),
 ):
@@ -236,14 +263,16 @@ async def conclude_reflection(
 
     session_state = _active_sessions[session_id]
     profile_id = session_state.get("profile_id", 0)
+    if profile_id != profile.id:
+        return {"error": "Session not found or expired."}
 
     # Fetch profile for spectrum context
     profile_data = None
     if profile_id:
         row = await db.execute(select(UserProfile).where(UserProfile.id == profile_id))
-        profile = row.scalar_one_or_none()
-        if profile:
-            profile_data = _get_profile_dict(profile)
+        stored_profile = row.scalar_one_or_none()
+        if stored_profile:
+            profile_data = _get_profile_dict(stored_profile)
 
     conclusion = await ReflectionService.conclude_reflection(
         session_state=session_state,
@@ -321,6 +350,7 @@ async def conclude_reflection(
 @router.post("/quick")
 async def quick_reflection(
     payload: dict,
+    profile: UserProfile = Depends(get_current_profile),
     ai: AIService = Depends(get_ai_service),
 ):
     """Generate a lightweight one-shot reflection without full dialogue.

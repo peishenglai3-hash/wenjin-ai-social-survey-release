@@ -206,7 +206,11 @@ async def get_scenario_template(scenario_id: str):
 
 
 @router.post("/design/stream")
-async def design_scenario_stream(payload: dict, ai: AIService = Depends(get_ai_service)):
+async def design_scenario_stream(
+    payload: dict,
+    profile: UserProfile = Depends(get_current_profile),
+    ai: AIService = Depends(get_ai_service),
+):
     """AI-powered scenario design — streaming SSE response."""
     answers = payload.get("answers", {})
     theme = payload.get("theme", "academic")
@@ -250,7 +254,11 @@ async def design_scenario_stream(payload: dict, ai: AIService = Depends(get_ai_s
 
 
 @router.post("/design")
-async def design_scenario(payload: dict, ai: AIService = Depends(get_ai_service)):
+async def design_scenario(
+    payload: dict,
+    profile: UserProfile = Depends(get_current_profile),
+    ai: AIService = Depends(get_ai_service),
+):
     """Non-streaming scenario design."""
     answers = payload.get("answers", {})
     theme = payload.get("theme", "academic")
@@ -314,8 +322,17 @@ async def list_saved_scenarios(
 
 
 @router.get("/saved/{design_id}")
-async def get_saved_scenario(design_id: int, db: AsyncSession = Depends(get_db)):
-    row = await db.execute(select(ScenarioDesign).where(ScenarioDesign.id == design_id))
+async def get_saved_scenario(
+    design_id: int,
+    profile: UserProfile = Depends(get_current_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    row = await db.execute(
+        select(ScenarioDesign).where(
+            ScenarioDesign.id == design_id,
+            ScenarioDesign.profile_id == profile.id,
+        )
+    )
     d = row.scalar_one_or_none()
     if not d:
         return {"error": "Scenario design not found"}
