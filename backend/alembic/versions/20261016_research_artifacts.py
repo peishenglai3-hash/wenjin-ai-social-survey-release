@@ -7,7 +7,7 @@ Create Date: 2026-10-16
 
 from typing import Sequence, Union
 
-from alembic import op
+from alembic import context, op
 import sqlalchemy as sa
 
 
@@ -17,9 +17,14 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _table_exists(name: str) -> bool:
+    if context.is_offline_mode():
+        return False
+    return sa.inspect(op.get_bind()).has_table(name)
+
+
 def upgrade() -> None:
-    inspector = sa.inspect(op.get_bind())
-    if not inspector.has_table("research_artifacts"):
+    if not _table_exists("research_artifacts"):
         op.create_table(
             "research_artifacts",
             sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
@@ -42,7 +47,7 @@ def upgrade() -> None:
             ["project_id", "status"],
         )
 
-    if not inspector.has_table("research_artifact_versions"):
+    if not _table_exists("research_artifact_versions"):
         op.create_table(
             "research_artifact_versions",
             sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
@@ -74,7 +79,7 @@ def upgrade() -> None:
             ["artifact_id", "idempotency_key"],
         )
 
-    if not inspector.has_table("research_annotations"):
+    if not _table_exists("research_annotations"):
         op.create_table(
             "research_annotations",
             sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
@@ -97,7 +102,7 @@ def upgrade() -> None:
             ["version_id", "status"],
         )
 
-    if not inspector.has_table("research_review_tasks"):
+    if not _table_exists("research_review_tasks"):
         op.create_table(
             "research_review_tasks",
             sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
@@ -121,7 +126,7 @@ def upgrade() -> None:
             ["version_id", "status"],
         )
 
-    if not inspector.has_table("research_shares"):
+    if not _table_exists("research_shares"):
         op.create_table(
             "research_shares",
             sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
@@ -152,21 +157,20 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    inspector = sa.inspect(op.get_bind())
-    if inspector.has_table("research_shares"):
+    if _table_exists("research_shares"):
         op.drop_index("ix_research_shares_expires", table_name="research_shares")
         op.drop_index("ix_research_shares_version_status", table_name="research_shares")
         op.drop_table("research_shares")
-    if inspector.has_table("research_review_tasks"):
+    if _table_exists("research_review_tasks"):
         op.drop_index("ix_research_review_tasks_version_status", table_name="research_review_tasks")
         op.drop_table("research_review_tasks")
-    if inspector.has_table("research_annotations"):
+    if _table_exists("research_annotations"):
         op.drop_index("ix_research_annotations_version_status", table_name="research_annotations")
         op.drop_table("research_annotations")
-    if inspector.has_table("research_artifact_versions"):
+    if _table_exists("research_artifact_versions"):
         op.drop_index("ix_research_artifact_versions_idempotency", table_name="research_artifact_versions")
         op.drop_index("ix_research_artifact_versions_artifact_created", table_name="research_artifact_versions")
         op.drop_table("research_artifact_versions")
-    if inspector.has_table("research_artifacts"):
+    if _table_exists("research_artifacts"):
         op.drop_index("ix_research_artifacts_project_status", table_name="research_artifacts")
         op.drop_table("research_artifacts")

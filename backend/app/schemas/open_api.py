@@ -2,7 +2,10 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+MAX_TOTAL_INPUT_CHARS = 200_000
 
 
 class OpenAPIMessage(BaseModel):
@@ -28,6 +31,15 @@ class OpenAPIChatRequest(BaseModel):
         if not any(message.role == "user" for message in value):
             raise ValueError("at least one user message is required")
         return value
+
+    @model_validator(mode="after")
+    def input_size_must_be_bounded(self) -> "OpenAPIChatRequest":
+        total_chars = sum(len(message.content) for message in self.messages)
+        if total_chars > MAX_TOTAL_INPUT_CHARS:
+            raise ValueError(
+                f"combined message content cannot exceed {MAX_TOTAL_INPUT_CHARS} characters"
+            )
+        return self
 
 
 class OpenAPIUsage(BaseModel):

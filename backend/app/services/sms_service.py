@@ -8,7 +8,7 @@ PIPL compliance: codes expire in 5 minutes, rate-limited per phone number.
 """
 
 import logging
-import random
+import secrets
 import time
 from typing import Optional
 
@@ -25,7 +25,7 @@ except ImportError:
 
 
 class SmsService:
-    """SMS verification code service with dev/prod mode switching."""
+    """SMS verification service that fails closed without a real provider."""
 
     def __init__(
         self,
@@ -47,7 +47,7 @@ class SmsService:
         """Lazy-init Alibaba Cloud SMS client."""
         if self._client is not None:
             return self._client
-        if not ALIBABA_SDK_AVAILABLE or not self.access_key_id:
+        if not ALIBABA_SDK_AVAILABLE or not self.access_key_id or not self.access_key_secret:
             return None
         try:
             config = open_api_models.Config(
@@ -63,7 +63,15 @@ class SmsService:
 
     def generate_code(self) -> str:
         """Generate a 6-digit numeric verification code."""
-        return f"{random.randint(100000, 999999)}"
+        return f"{secrets.randbelow(900000) + 100000}"
+
+    @property
+    def is_configured(self) -> bool:
+        return bool(
+            ALIBABA_SDK_AVAILABLE
+            and self.access_key_id.strip()
+            and self.access_key_secret.strip()
+        )
 
     def _store_code(self, phone: str, code: str, ttl_seconds: int = 300):
         """Store code with expiry (replace with Redis in production)."""
@@ -78,20 +86,23 @@ class SmsService:
         if time.time() > expiry:
             del self._code_store[phone]
             return False
-        if stored_code != code:
+        if not secrets.compare_digest(stored_code, code):
             return False
         del self._code_store[phone]  # one-time use
         return True
 
     async def send_verification(self, phone: str) -> bool:
-        """Send verification code to phone. Falls back to console log in dev."""
+        """Send a verification code; never return or log it on failure."""
+        if not self.is_configured:
+            logger.warning("SMS provider unavailable; verification delivery disabled")
+            return False
+
         code = self.generate_code()
-        self._store_code(phone, code)
         client = self._get_client()
 
         if client is None:
-            logger.info("[DEV] SMS code for %s: %s (Alibaba Cloud SMS not configured)", phone, code)
-            return True
+            logger.warning("SMS client unavailable; verification delivery disabled")
+            return False
 
         try:
             request = dysmsapi_models.SendSmsRequest(
@@ -102,15 +113,14 @@ class SmsService:
             )
             response = client.send_sms(request)
             if response.body.code == "OK":
-                logger.info("SMS sent to %s", phone)
+                self._store_code(phone, code)
+                logger.info("SMS sent to %s", self.mask_phone(phone))
                 return True
-            logger.error("SMS send failed for %s: %s", phone, response.body.message)
-            logger.info("[FALLBACK] SMS code for %s: %s", phone, code)
-            return True
-        except Exception as e:
-            logger.error("SMS send exception for %s: %s", phone, e)
-            logger.info("[FALLBACK] SMS code for %s: %s", phone, code)
-            return True
+            logger.warning("SMS provider rejected request for %s", self.mask_phone(phone))
+            return False
+        except Exception:
+            logger.exception("SMS provider request failed for %s", self.mask_phone(phone))
+            return False
 
     @staticmethod
     def mask_phone(phone: str) -> str:
@@ -127,5 +137,13 @@ _sms_service: Optional[SmsService] = None
 def get_sms_service() -> SmsService:
     global _sms_service
     if _sms_service is None:
-        _sms_service = SmsService()
+        from app.config import settings
+
+        _sms_service = SmsService(
+            access_key_id=settings.sms_access_key_id,
+            access_key_secret=settings.sms_access_key_secret,
+            sign_name=settings.sms_sign_name,
+            template_code=settings.sms_template_code,
+            endpoint=settings.sms_endpoint,
+        )
     return _sms_service

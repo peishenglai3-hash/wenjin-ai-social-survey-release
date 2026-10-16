@@ -1,1 +1,7 @@
 Generic single-database configuration.
+
+Shared and production databases must be upgraded explicitly with Alembic before
+the application starts. The revision chain also supports
+alembic upgrade head --sql for generating a static script from a clean
+revision baseline; online upgrades retain compatibility guards for legacy
+tables and columns.

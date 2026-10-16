@@ -66,6 +66,8 @@ async def create_chat_completion(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Open API is disabled")
     if len(payload.messages) > settings.open_api_max_messages:
         raise HTTPException(status_code=413, detail="Too many messages")
+    if sum(len(message.content) for message in payload.messages) > settings.open_api_max_input_chars:
+        raise HTTPException(status_code=413, detail="Input content exceeds deployment limit")
     if payload.max_tokens > settings.open_api_max_tokens:
         raise HTTPException(status_code=413, detail="max_tokens exceeds deployment limit")
 

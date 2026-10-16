@@ -7,16 +7,20 @@ Supports mixed messages: binary PCM (audio) + JSON text (facial signals).
 
 from __future__ import annotations
 import asyncio, json, logging, time
+import uuid
 from typing import Optional
 from fastapi import WebSocket, WebSocketDisconnect
 from app.config import settings
-from app.services.emotion_tracker import EmotionTracker, EmotionAlert
+from app.services.emotion_tracker import EmotionTracker, EmotionAlert, emotion_timeline_store
 
 logger = logging.getLogger(__name__)
 
 SUMMARY_INTERVAL_S = 120
 HINT_INTERVAL_S = 15
 EMOTION_SAMPLE_INTERVAL_S = 5.0
+MAX_AUDIO_FRAME_BYTES = 256 * 1024
+MAX_TEXT_FRAME_BYTES = 32 * 1024
+MAX_MESSAGES_PER_MINUTE = 600
 
 class RealtimePipeline:
     """WebSocket-based real-time interview pipeline.
@@ -37,16 +41,21 @@ class RealtimePipeline:
         self._started_at = 0.0
         self._last_summary_at = 0.0
         self._last_hint_at = 0.0
+        self._owner_id: int | None = None
 
     async def handle(self, ws: WebSocket, session_id: str = "", scenario: str = "community_interview",
-                     theme: str = "academic", phase: str = "opening") -> None:
-        self._session_id = session_id or f"session_{int(time.time())}"
+                     theme: str = "academic", phase: str = "opening", owner_id: int | None = None) -> None:
+        self._session_id = session_id[:64] or f"session_{uuid.uuid4().hex[:12]}"
+        self._owner_id = owner_id
         self._scenario = scenario; self._theme = theme; self._phase = phase
         self._started_at = time.time()
         self._last_summary_at = self._started_at; self._last_hint_at = self._started_at
         self._full_transcript.clear(); self._transcript_since_summary.clear(); self._transcript_since_hint.clear()
 
-        self.emotion = EmotionTracker(sample_interval_s=EMOTION_SAMPLE_INTERVAL_S)
+        self.emotion = EmotionTracker(
+            sample_interval_s=EMOTION_SAMPLE_INTERVAL_S,
+            user_id=owner_id,
+        )
         self.emotion.start_session(self._session_id)
 
         await ws.send_json({"type":"session_started","session_id":self._session_id,"scenario":self._scenario,"phase":self._phase,"timestamp_ms":0})
@@ -67,6 +76,8 @@ class RealtimePipeline:
             summary_task.cancel(); hint_task.cancel()
             if self.emotion:
                 timeline = self.emotion.end_session()
+                if owner_id is not None:
+                    emotion_timeline_store.put(self._session_id, owner_id, timeline)
                 try:
                     await ws.send_json({"type":"session_ended","session_id":self._session_id,
                         "duration_s":int(time.time()-self._started_at),
@@ -128,18 +139,37 @@ class RealtimePipeline:
 
                 # ── Client → Qwen + Facial dispatch ──
                 async def client_dispatch():
+                    message_count = 0
+                    rate_window_started = time.monotonic()
                     try:
                         while True:
                             data = await ws.receive()
                             if data["type"] == "websocket.disconnect":
                                 break
+                            now = time.monotonic()
+                            if now - rate_window_started >= 60:
+                                rate_window_started = now
+                                message_count = 0
+                            message_count += 1
+                            if message_count > MAX_MESSAGES_PER_MINUTE:
+                                await ws.send_json({"type": "error", "message": "WebSocket message rate exceeded"})
+                                await ws.close(code=1013)
+                                break
                             if "bytes" in data:
+                                if data["bytes"] is None or len(data["bytes"]) > MAX_AUDIO_FRAME_BYTES:
+                                    await ws.send_json({"type": "error", "message": "Audio frame too large"})
+                                    await ws.close(code=1009)
+                                    break
                                 # Binary PCM audio → forward to Qwen
                                 await qwen_ws.send(data["bytes"])
                                 # Feed audio to emotion tracker for volume estimation
                                 if self.emotion:
                                     await self.emotion.feed_audio(data["bytes"])
                             elif "text" in data:
+                                if data["text"] is None or len(data["text"].encode("utf-8")) > MAX_TEXT_FRAME_BYTES:
+                                    await ws.send_json({"type": "error", "message": "Text frame too large"})
+                                    await ws.close(code=1009)
+                                    break
                                 msg = json.loads(data["text"])
                                 msg_type = msg.get("type", "")
                                 if msg_type == "end":
@@ -219,7 +249,13 @@ class RealtimePipeline:
         ai = AIService(api_key=settings.deepseek_api_key, base_url=settings.deepseek_base_url, model="deepseek-v4-flash")
         prompt = f"请将以下约2分钟的访谈片段浓缩为1-2句话的要点总结：\n\n{transcript[:2000]}\n\n要求：只输出1-2句中文，包含关键信息和主题方向。"
         messages = [{"role":"system","content":"你是专业的访谈纪要助手。简洁、精准。"}, {"role":"user","content":prompt}]
-        result = await ai.chat(messages, temperature=0.3, max_tokens=256, task="summarize")
+        result = await ai.chat(
+            messages,
+            temperature=0.3,
+            max_tokens=256,
+            task="summarize",
+            user_id=self._owner_id,
+        )
         return result.strip()
 
     async def _generate_hints(self, payload: dict, alert: Optional[EmotionAlert]) -> list:
@@ -251,10 +287,14 @@ class RealtimePipeline:
         prompt = f"访谈场景: {scenario}\n阶段: {phase}\n情绪: {emotion}{emotion_context}\n最近对话:\n{transcript[:1500]}\n\n作为访谈教练，提供2-3条即时建议（追问方向/话术建议）。每条20字以内。输出JSON数组: [\"建议1\",\"建议2\"]"
         messages = [{"role":"system","content":"你是田野访谈教练，提供简洁可操作的即时建议。输出纯JSON数组。"}, {"role":"user","content":prompt}]
         try:
-            result = await ai.chat(messages, temperature=0.5, max_tokens=512, task="hints")
+            result = await ai.chat(
+                messages,
+                temperature=0.5,
+                max_tokens=512,
+                task="hints",
+                user_id=self._owner_id,
+            )
             return json.loads(result.strip())
         except Exception:
             logger.warning("Hint generation via DeepSeek fallback failed", exc_info=True)
             return []
-
-realtime_pipeline = RealtimePipeline()

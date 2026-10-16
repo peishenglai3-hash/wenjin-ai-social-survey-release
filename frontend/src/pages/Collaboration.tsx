@@ -110,7 +110,7 @@ export default function Collaboration() {
       <h2>协作研究模式</h2>
       <p className="subtitle">{project.title} · 显式保存、可审计、脱敏版本协作</p>
       {error && <div className="error-banner" role="alert">{error}</div>}
-      {loading ? <p className="hint">正在加载协作元数据...</p> : (
+      {loading ? <p className="hint" role="status" aria-live="polite">正在加载协作元数据...</p> : (
         <>
           <section className="onboarding-card" aria-labelledby="collaboration-members">
             <h3 id="collaboration-members">项目成员（{members.length}）</h3>
@@ -124,17 +124,26 @@ export default function Collaboration() {
 
           <section className="onboarding-card" aria-labelledby="collaboration-artifacts" style={{ marginTop: 16 }}>
             <h3 id="collaboration-artifacts">研究产物</h3>
-            <form onSubmit={submitArtifact} style={{ display: "grid", gap: 8, margin: "12px 0 20px" }}>
+            <form className="collaboration-artifact-form" onSubmit={submitArtifact}>
               <div className="input-row">
-                <input value={artifactKey} onChange={(event) => setArtifactKey(event.target.value)} placeholder="产物键，如 research-plan" maxLength={100} />
-                <input value={artifactTitle} onChange={(event) => setArtifactTitle(event.target.value)} placeholder="产物标题" maxLength={200} />
-                <select value={artifactKind} onChange={(event) => setArtifactKind(event.target.value)} aria-label="产物类型">
-                  {artifactKinds.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
-                <button type="submit" disabled={creating}>{creating ? "创建中..." : "新建产物"}</button>
+                <div className="collaboration-field">
+                  <label htmlFor="artifact-key">产物键</label>
+                  <input id="artifact-key" value={artifactKey} onChange={(event) => setArtifactKey(event.target.value)} placeholder="如 research-plan" maxLength={100} />
+                </div>
+                <div className="collaboration-field">
+                  <label htmlFor="artifact-title">产物标题</label>
+                  <input id="artifact-title" value={artifactTitle} onChange={(event) => setArtifactTitle(event.target.value)} placeholder="输入研究产物标题" maxLength={200} />
+                </div>
+                <div className="collaboration-field">
+                  <label htmlFor="artifact-kind">产物类型</label>
+                  <select id="artifact-kind" value={artifactKind} onChange={(event) => setArtifactKind(event.target.value)}>
+                    {artifactKinds.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </div>
+                <button className="collaboration-artifact-submit" type="submit" disabled={creating}>{creating ? "创建中..." : "新建产物"}</button>
               </div>
             </form>
-            {artifacts.length === 0 ? <p className="hint">暂无研究产物。创建后可在后端接口继续提交脱敏版本、批注和审核任务。</p> : (
+            {artifacts.length === 0 ? <p className="hint" role="status">暂无研究产物。创建后可在后端接口继续提交脱敏版本、批注和审核任务。</p> : (
               <div className="library-grid">
                 {artifacts.map((artifact) => (
                   <div className="library-card" key={artifact.id}>

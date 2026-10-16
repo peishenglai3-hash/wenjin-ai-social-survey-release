@@ -7,7 +7,7 @@ Create Date: 2026-10-16
 
 from typing import Sequence, Union
 
-from alembic import op
+from alembic import context, op
 import sqlalchemy as sa
 
 
@@ -18,12 +18,15 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def _existing_columns() -> set[str]:
+    if context.is_offline_mode():
+        return set()
     return {column["name"] for column in sa.inspect(op.get_bind()).get_columns("reference_cards")}
 
 
 def upgrade() -> None:
-    inspector = sa.inspect(op.get_bind())
-    if not inspector.has_table("reference_cards"):
+    # The preceding knowledge migration creates this table on a clean offline
+    # revision chain. Existing online databases still get the table guard.
+    if not context.is_offline_mode() and not sa.inspect(op.get_bind()).has_table("reference_cards"):
         return
     columns = _existing_columns()
     additions = (
@@ -38,8 +41,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    inspector = sa.inspect(op.get_bind())
-    if not inspector.has_table("reference_cards"):
+    if context.is_offline_mode() or not sa.inspect(op.get_bind()).has_table("reference_cards"):
         return
     columns = _existing_columns()
     for name in ("material_type", "method_tags", "field_context", "language"):

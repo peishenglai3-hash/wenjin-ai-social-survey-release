@@ -7,7 +7,7 @@ Create Date: 2026-10-16
 
 from typing import Sequence, Union
 
-from alembic import op
+from alembic import context, op
 import sqlalchemy as sa
 
 
@@ -25,10 +25,16 @@ def _timestamps() -> list[sa.Column]:
 
 
 def _table_exists(name: str) -> bool:
+    # Offline SQL generation starts from the clean revision chain and cannot
+    # inspect a MockConnection. Online upgrades retain the legacy-table guard.
+    if context.is_offline_mode():
+        return False
     return sa.inspect(op.get_bind()).has_table(name)
 
 
 def _index_exists(table_name: str, index_name: str) -> bool:
+    if context.is_offline_mode():
+        return False
     return any(
         index.get("name") == index_name
         for index in sa.inspect(op.get_bind()).get_indexes(table_name)

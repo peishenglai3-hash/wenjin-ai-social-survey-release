@@ -1,0 +1,15 @@
+.git/
+.github/
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+*.log
+*.pem
+*.key
+*.db
+*.sqlite
+*.sqlite3
+*.zip
+*.tar.gz

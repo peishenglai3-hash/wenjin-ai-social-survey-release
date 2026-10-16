@@ -7,7 +7,7 @@ Create Date: 2026-10-16
 
 from typing import Sequence, Union
 
-from alembic import op
+from alembic import context, op
 import sqlalchemy as sa
 
 
@@ -18,8 +18,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    inspector = sa.inspect(op.get_bind())
-    if inspector.has_table("wise_proposals"):
+    if not context.is_offline_mode() and sa.inspect(op.get_bind()).has_table("wise_proposals"):
         return
     op.create_table(
         "wise_proposals",
@@ -66,8 +65,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    inspector = sa.inspect(op.get_bind())
-    if not inspector.has_table("wise_proposals"):
+    if context.is_offline_mode() or not sa.inspect(op.get_bind()).has_table("wise_proposals"):
         return
     op.drop_index("ix_wise_proposals_profile_idempotency", table_name="wise_proposals")
     op.drop_index("ix_wise_proposals_project", table_name="wise_proposals")

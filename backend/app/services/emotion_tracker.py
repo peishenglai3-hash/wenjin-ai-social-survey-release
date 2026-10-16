@@ -6,8 +6,10 @@ Outputs real-time emotion stream consumable by the interviewer HUD.
 
 from __future__ import annotations
 import asyncio, json, logging, time
+from copy import deepcopy
 from collections import deque
 from dataclasses import dataclass, field
+from threading import RLock
 from typing import Optional
 from app.config import settings
 
@@ -47,6 +49,49 @@ class EmotionAlert:
     suggested_action: str = ""
     urgency: float = 0.0
 
+
+class EmotionTimelineStore:
+    """Bounded, owner-scoped store for completed WebSocket timelines.
+
+    Trackers themselves are always per WebSocket connection.  This small
+    store only keeps completed timelines long enough for the existing HTTP
+    retrieval endpoint to remain useful; it never exposes one user's
+    timeline to another user.
+    """
+
+    def __init__(self, max_entries: int = 256, ttl_seconds: int = 3600):
+        self.max_entries = max_entries
+        self.ttl_seconds = ttl_seconds
+        self._entries: dict[str, tuple[int, float, EmotionTimeline]] = {}
+        self._lock = RLock()
+
+    def put(self, session_id: str, owner_id: int, timeline: EmotionTimeline) -> None:
+        now = time.time()
+        with self._lock:
+            self._prune(now)
+            self._entries[session_id] = (owner_id, now, deepcopy(timeline))
+            while len(self._entries) > self.max_entries:
+                oldest = min(self._entries, key=lambda key: self._entries[key][1])
+                self._entries.pop(oldest, None)
+
+    def get(self, session_id: str, owner_id: int) -> EmotionTimeline | None:
+        now = time.time()
+        with self._lock:
+            self._prune(now)
+            entry = self._entries.get(session_id)
+            if entry is None or entry[0] != owner_id:
+                return None
+            return deepcopy(entry[2])
+
+    def _prune(self, now: float) -> None:
+        expired = [
+            session_id
+            for session_id, (_, created_at, _) in self._entries.items()
+            if now - created_at > self.ttl_seconds
+        ]
+        for session_id in expired:
+            self._entries.pop(session_id, None)
+
 class EmotionTracker:
     """Real-time multi-modal emotion tracker for interview scenarios.
     Fuses voice acoustics + semantic sentiment + para-linguistic features.
@@ -74,8 +119,9 @@ class EmotionTracker:
             suggested_action="重新建立互动，确认受访者是否愿意继续，或调整访谈节奏"),
     }
 
-    def __init__(self, sample_interval_s: float = 5.0):
+    def __init__(self, sample_interval_s: float = 5.0, user_id: int | None = None):
         self.sample_interval_s = sample_interval_s
+        self.user_id = user_id
         self._samples: deque = deque(maxlen=720)
         self._session_id = ""
         self._started_at = 0.0
@@ -207,7 +253,13 @@ class EmotionTracker:
             ai = AIService(api_key=settings.deepseek_api_key, base_url=settings.deepseek_base_url, model="deepseek-v4-flash")
             prompt = f'分析以下受访者发言的情感倾向，仅输出JSON: {{"label": "positive|negative|neutral|mixed", "confidence": 0.0-1.0}}\n\n"{text[:500]}"'
             messages = [{"role":"system","content":"你是一个情感分析器。只输出JSON。"}, {"role":"user","content":prompt}]
-            result = await ai.chat(messages, temperature=0.1, max_tokens=128, task="hints")
+            result = await ai.chat(
+                messages,
+                temperature=0.1,
+                max_tokens=128,
+                task="hints",
+                user_id=self.user_id,
+            )
             return json.loads(result.strip())
         except Exception:
             logger.warning("Emotion analysis failed", exc_info=True)
@@ -291,4 +343,4 @@ class EmotionTracker:
             if abs(sample.facial_head_yaw) > 20: intensity += 0.05  # looking away
         return min(intensity, 1.0)
 
-emotion_tracker = EmotionTracker()
+emotion_timeline_store = EmotionTimelineStore()

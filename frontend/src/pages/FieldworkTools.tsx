@@ -958,11 +958,13 @@ export default function FieldworkTools() {
       )}
 
       {/* Tab bar */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 24, borderBottom: "2px solid var(--border)", paddingBottom: 0 }}>
+      <div className="fieldwork-tabs" role="group" aria-label="田野工具模块">
         {tabs.map((t) => (
           <button
             key={t.key}
+            type="button"
             onClick={() => setActiveTab(t.key)}
+            aria-pressed={activeTab === t.key}
             className={`fieldwork-tab${activeTab === t.key ? " fieldwork-tab--active" : ""}`}
           >
             <span style={{ marginRight: 6 }}>{t.icon}</span>
@@ -996,7 +998,7 @@ export default function FieldworkTools() {
                 </div>
                 <button
                   onClick={() => setShowScenarioPicker(!showScenarioPicker)}
-                  className="btn-secondary"
+                  className="btn-secondary scenario-picker-toggle"
                   style={{ fontSize: 12, padding: "5px 12px", whiteSpace: "nowrap" }}
                 >
                   {showScenarioPicker ? "收起 ▲" : selectedScenario ? "更换场景" : "选择场景"}
@@ -1015,6 +1017,16 @@ export default function FieldworkTools() {
                     <div
                       key={t.id}
                       onClick={() => { setSelectedScenario(t); setShowScenarioPicker(false); }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setSelectedScenario(t);
+                          setShowScenarioPicker(false);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={selectedScenario?.id === t.id}
                       style={{
                         padding: "10px 12px", borderRadius: 8, cursor: "pointer",
                         border: selectedScenario?.id === t.id ? "2px solid var(--primary)" : "1px solid transparent",
@@ -1070,7 +1082,7 @@ export default function FieldworkTools() {
           )}
 
         <div className="placeholder-panel">
-          <div className="status-indicator">
+          <div className="status-indicator" role="status" aria-live="polite">
             <span className={`status-dot ${status === "recording" ? "status-dot--on" : status === "connecting" ? "status-dot--connecting" : "status-dot--off"}`} />
             <span>
               {status === "idle" && "录音就绪 · 点击开始"}
@@ -1176,7 +1188,9 @@ export default function FieldworkTools() {
           {status === "recording" && (
             <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
               <button
+                type="button"
                 onClick={() => setCurrentSpeaker("interviewer")}
+                aria-pressed={currentSpeaker === "interviewer"}
                 style={{
                   flex: 1, padding: "10px 16px",
                   background: currentSpeaker === "interviewer" ? "#1E3A8A" : "#E2E8F0",
@@ -1189,7 +1203,9 @@ export default function FieldworkTools() {
                 🎤 我来说（提问）
               </button>
               <button
+                type="button"
                 onClick={() => setCurrentSpeaker("respondent")}
+                aria-pressed={currentSpeaker === "respondent"}
                 style={{
                   flex: 1, padding: "10px 16px",
                   background: currentSpeaker === "respondent" ? "#C2410C" : "#E2E8F0",
@@ -1219,7 +1235,7 @@ export default function FieldworkTools() {
           )}
 
           {errorMsg && (
-            <div style={{ padding: "12px 16px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, marginBottom: 16 }}>
+            <div role="alert" style={{ padding: "12px 16px", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, marginBottom: 16 }}>
               {errorMsg}
             </div>
           )}

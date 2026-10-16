@@ -164,14 +164,14 @@ export default function Home() {
                     </div>
                   </div>
                   {dash.next_step && (
-                    <div className="next-step-banner" onClick={() => navigate(dash.next_step.to)}>
+                    <button type="button" className="next-step-banner" onClick={() => navigate(dash.next_step.to)}>
                       <span style={{ fontSize: 20 }}>{dash.next_step.icon}</span>
                       <div>
                         <strong>{dash.next_step.action}</strong>
                         <span style={{ color: "var(--text-muted)", fontSize: 13, marginLeft: 8 }}>{dash.next_step.desc}</span>
                       </div>
                       <span style={{ marginLeft: "auto", color: "var(--primary)" }}>→</span>
-                    </div>
+                    </button>
                   )}
                 </>
               ) : (

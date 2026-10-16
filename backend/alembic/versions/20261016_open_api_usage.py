@@ -7,7 +7,7 @@ Create Date: 2026-10-16
 
 from typing import Sequence, Union
 
-from alembic import op
+from alembic import context, op
 import sqlalchemy as sa
 
 
@@ -18,8 +18,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    inspector = sa.inspect(op.get_bind())
-    if inspector.has_table("open_api_usage_records"):
+    if not context.is_offline_mode() and sa.inspect(op.get_bind()).has_table("open_api_usage_records"):
         return
     op.create_table(
         "open_api_usage_records",
@@ -47,8 +46,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    inspector = sa.inspect(op.get_bind())
-    if not inspector.has_table("open_api_usage_records"):
+    if context.is_offline_mode() or not sa.inspect(op.get_bind()).has_table("open_api_usage_records"):
         return
     op.drop_index("ix_open_api_usage_request", table_name="open_api_usage_records")
     op.drop_index("ix_open_api_usage_profile_created", table_name="open_api_usage_records")

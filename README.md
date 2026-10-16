@@ -37,6 +37,8 @@ cp .env.example .env  # Windows 可手动复制文件
 
 编辑 `backend/.env`：至少设置一个 AI 供应商 key、一个随机的 `JWT_SECRET`，并把 `CORS_ORIGINS` 限定为本地前端地址。供应商 key 只应存在于后端环境变量中，不能写进前端代码、浏览器存储、日志或提交记录。
 
+手机号短信认证是可选部署能力；未配置真实短信供应商时会安全失败，服务端不会把验证码写入日志、响应或仓库。需要启用时，应在后端受控 secret 中配置 `SMS_ACCESS_KEY_ID`、`SMS_ACCESS_KEY_SECRET`、签名和模板，并自行完成供应商侧限流、合规与密钥轮换。
+
 ```bash
 alembic upgrade head
 uvicorn app.main:app --reload

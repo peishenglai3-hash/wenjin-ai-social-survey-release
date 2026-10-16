@@ -43,6 +43,7 @@ export default function QuestionnaireFill({ questionnaire, onComplete }: Questio
   const [answers, setAnswers] = useState<Map<string, AnswerEntry>>(new Map());
   const [respondentLabel, setRespondentLabel] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [done, setDone] = useState(false);
 
   const currentQ = questions[currentIndex];
@@ -89,6 +90,7 @@ export default function QuestionnaireFill({ questionnaire, onComplete }: Questio
 
   const handleSubmit = async () => {
     setSubmitting(true);
+    setSubmitError("");
     try {
       const res = await api.post(`/questionnaire/${questionnaire.id}/respond`, {
         respondent_label: respondentLabel || `受访者${new Date().toLocaleTimeString("zh-CN")}`,
@@ -97,7 +99,7 @@ export default function QuestionnaireFill({ questionnaire, onComplete }: Questio
       setDone(true);
       onComplete?.(res.data.id);
     } catch {
-      alert("提交失败，请重试");
+      setSubmitError("提交失败，请重试。请检查网络连接后再次提交。");
     } finally {
       setSubmitting(false);
     }
@@ -105,13 +107,13 @@ export default function QuestionnaireFill({ questionnaire, onComplete }: Questio
 
   if (done) {
     return (
-      <div style={{ textAlign: "center", padding: 32 }}>
+      <div style={{ textAlign: "center", padding: 32 }} role="status">
         <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
         <h3>问卷填写完成</h3>
         <p style={{ color: "var(--text-muted)" }}>
           共 {questions.length} 题，已提交 {answers.size} 个回答。
         </p>
-        <button onClick={() => { setDone(false); setCurrentIndex(0); setAnswers(new Map()); }}
+        <button type="button" onClick={() => { setDone(false); setCurrentIndex(0); setAnswers(new Map()); setSubmitError(""); }}
           className="btn-secondary" style={{ marginTop: 16 }}>
           填写新一份
         </button>
@@ -120,7 +122,7 @@ export default function QuestionnaireFill({ questionnaire, onComplete }: Questio
   }
 
   if (!currentQ) {
-    return <p style={{ color: "var(--text-muted)", textAlign: "center", padding: 32 }}>问卷中没有题目。</p>;
+    return <p role="status" style={{ color: "var(--text-muted)", textAlign: "center", padding: 32 }}>问卷中没有题目。</p>;
   }
 
   const currentAnswer = answers.get(currentQ.id);
@@ -132,7 +134,14 @@ export default function QuestionnaireFill({ questionnaire, onComplete }: Questio
           <span>第 {currentIndex + 1}/{questions.length} 题</span>
           <span>{progress}%</span>
         </div>
-        <div style={{ background: "#E5E7EB", borderRadius: 4, height: 6, overflow: "hidden" }}>
+        <div
+          role="progressbar"
+          aria-label="问卷完成进度"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={progress}
+          style={{ background: "#E5E7EB", borderRadius: 4, height: 6, overflow: "hidden" }}
+        >
           <div style={{ width: `${progress}%`, height: "100%", background: "var(--primary)", borderRadius: 4, transition: "width 0.2s" }} />
         </div>
       </div>
@@ -151,7 +160,8 @@ export default function QuestionnaireFill({ questionnaire, onComplete }: Questio
         {currentQ.scale_type === "nps" ? (
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {Array.from({ length: 11 }, (_, i) => (
-              <button key={i} onClick={() => setAnswer(currentQ.id, String(i), i)}
+              <button type="button" key={i} onClick={() => setAnswer(currentQ.id, String(i), i)}
+                aria-pressed={currentAnswer?.option_index === i}
                 style={{
                   width: 44, height: 44, borderRadius: 8, fontSize: 16, cursor: "pointer",
                   background: currentAnswer?.option_index === i ? "var(--primary)" : "#F1F5F9",
@@ -170,10 +180,11 @@ export default function QuestionnaireFill({ questionnaire, onComplete }: Questio
             {currentQ.options.map((opt, i) => {
               const selected = currentAnswer?.value ? currentAnswer.value.split("|").includes(opt) : false;
               return (
-                <button key={i} onClick={() => {
+                <button type="button" key={i} onClick={() => {
                   const cur = currentAnswer?.value ? currentAnswer.value.split("|").filter(Boolean) : [];
                   setAnswer(currentQ.id, selected ? cur.filter((v: string) => v !== opt).join("|") : [...cur, opt].join("|"), i);
                 }}
+                  aria-pressed={selected}
                   style={{
                     padding: "12px 16px", textAlign: "left", fontSize: 15, cursor: "pointer", borderRadius: 8,
                     background: selected ? "#EEF2FF" : "#F9FAFB",
@@ -190,10 +201,11 @@ export default function QuestionnaireFill({ questionnaire, onComplete }: Questio
             {currentQ.options.map((opt, i) => {
               const rank = currentAnswer?.value ? currentAnswer.value.split("|").indexOf(opt) : -1;
               return (
-                <button key={i} onClick={() => {
+                <button type="button" key={i} onClick={() => {
                   const cur = currentAnswer?.value ? currentAnswer.value.split("|").filter(Boolean) : [];
                   setAnswer(currentQ.id, cur.includes(opt) ? cur.filter((v: string) => v !== opt).join("|") : [...cur, opt].join("|"));
                 }}
+                  aria-pressed={rank >= 0}
                   style={{ display: "block", width: "100%", padding: "10px 14px", marginBottom: 4, textAlign: "left", fontSize: 14, cursor: "pointer", borderRadius: 8,
                     background: rank >= 0 ? "#EEF2FF" : "#F9FAFB", border: rank >= 0 ? "2px solid var(--primary)" : "1px solid var(--border)" }}>
                   {rank >= 0 ? `${rank + 1}. ` : ""}{opt}
@@ -203,12 +215,13 @@ export default function QuestionnaireFill({ questionnaire, onComplete }: Questio
           </div>
         ) : currentQ.scale_type === "open" ? (
           <textarea value={currentAnswer?.value || ""} onChange={(e) => setAnswer(currentQ.id, e.target.value)}
-            placeholder="请输入回答..." rows={4}
+            aria-label="开放题回答" placeholder="请输入回答..." rows={4}
             style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid var(--border)", resize: "vertical" }} />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {currentQ.options.map((opt, i) => (
-              <button key={i} onClick={() => setAnswer(currentQ.id, opt, i)}
+              <button type="button" key={i} onClick={() => setAnswer(currentQ.id, opt, i)}
+                aria-pressed={currentAnswer?.option_index === i}
                 style={{ padding: "12px 16px", textAlign: "left", fontSize: 15, cursor: "pointer", borderRadius: 8,
                   background: currentAnswer?.option_index === i ? "#EEF2FF" : "#F9FAFB",
                   border: currentAnswer?.option_index === i ? "2px solid var(--primary)" : "1px solid var(--border)" }}>
@@ -219,14 +232,16 @@ export default function QuestionnaireFill({ questionnaire, onComplete }: Questio
         )}
       </div>
 
+      {submitError && <div className="error-banner" role="alert" aria-live="assertive">{submitError}</div>}
+
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <button onClick={handlePrev} disabled={currentIndex === 0} className="btn-secondary" style={{ fontSize: 13 }}>← 上一题</button>
-        <button onClick={skipQuestion} className="btn-secondary" style={{ fontSize: 13, color: "#F59E0B" }}>跳过 ▸</button>
+        <button type="button" onClick={handlePrev} disabled={currentIndex === 0} className="btn-secondary" style={{ fontSize: 13 }}>← 上一题</button>
+        <button type="button" onClick={skipQuestion} className="btn-secondary" style={{ fontSize: 13, color: "#F59E0B" }}>跳过 ▸</button>
         <div style={{ flex: 1 }} />
         {currentIndex < questions.length - 1 ? (
-          <button onClick={handleNext} className="btn-primary" style={{ fontSize: 13 }}>下一题 →</button>
+          <button type="button" onClick={handleNext} className="btn-primary" style={{ fontSize: 13 }}>下一题 →</button>
         ) : (
-          <button onClick={handleSubmit} disabled={submitting} className="btn-primary" style={{ fontSize: 13, background: "#059669" }}>
+          <button type="button" onClick={handleSubmit} disabled={submitting} className="btn-primary" style={{ fontSize: 13, background: "#059669" }}>
             {submitting ? "提交中..." : "✓ 提交问卷"}
           </button>
         )}
@@ -234,7 +249,8 @@ export default function QuestionnaireFill({ questionnaire, onComplete }: Questio
 
       {currentIndex === questions.length - 1 && (
         <div style={{ marginTop: 16 }}>
-          <input value={respondentLabel} onChange={(e) => setRespondentLabel(e.target.value)}
+          <label htmlFor="respondent-label" className="visually-hidden">受访者标识（可选）</label>
+          <input id="respondent-label" value={respondentLabel} onChange={(e) => setRespondentLabel(e.target.value)}
             placeholder="受访者标识（如：受访者A，可选）"
             style={{ width: "100%", padding: "8px 12px", fontSize: 13, borderRadius: 6, border: "1px solid var(--border)" }} />
         </div>

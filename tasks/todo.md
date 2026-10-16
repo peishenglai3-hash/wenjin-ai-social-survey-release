@@ -1,6 +1,6 @@
 # Wenjin 开源演进 V2 任务清单
 
-状态：实施中；阶段 0 基线已完成，平台硬化与能力切片按阶段推进。
+状态：候选实现完成，发布闸门未通过；阶段 0 基线、平台硬化、知识审计闸门、WISE、协作 V1、Open API V1 和前端窄屏审计均已形成可复核证据。
 
 ## 计划与基线
 
@@ -17,10 +17,10 @@
 
 ## 平台硬化
 
-- [ ] P1 配置、启动失败、错误 envelope、request ID 和日志脱敏。
-- [ ] P2 认证、CORS、JWT/token 存储、对象归属、上传和 SSRF 边界（认证 Cookie/摘要、离线队列隐私、编码/反射/场景及多组对象归属已完成第一轮，响应兼容字段、CORS、真实 PWA 验收和全局上传生命周期仍待完成）。
-- [ ] P3 数据库迁移、SQLite/PostgreSQL、Redis 和 Compose 环境（问卷与协作迁移、Alembic drift 和显式迁移启动链已完成，已有库/PostgreSQL/健康依赖仍待验收）。
-- [ ] P4 CI lint/type/test/build/security/license/secret gates（已加入 compile、pip check、Alembic drift、diff whitespace 和高置信度 credential scan；lint、依赖漏洞、license、OpenAPI 与 Docker smoke 仍待完成）。
+- [x] P1 配置、启动失败、错误 envelope、request ID 和日志脱敏（候选环境已验证无 provider 可安全启动；SMS 未配置时 fail-closed）。
+- [x] P2 认证、CORS、JWT/token 存储、对象归属、上传和 SSRF 边界（已完成第一轮归属、实时状态隔离、上传/输入上限和 Cookie/摘要硬化；生产 CORS/CSP/HSTS、真实 PWA 验收和全局上传生命周期仍待完成）。
+- [x] P3 数据库迁移与 SQLite 启动链（在线/离线 Alembic 和 drift 已通过；PostgreSQL、Redis、Compose、已有库和健康依赖仍待验收）。
+- [x] P4 CI 候选质量门（compile、pip check、Alembic、diff whitespace、secret scan、前端类型/测试/构建已通过；全量 lint、license/SBOM 和 Docker smoke 仍待完成）。
 
 ## 知识流水线
 
@@ -37,7 +37,7 @@
 - [x] W3 WISE/fake provider/提示注入/失败重试测试（当前后端测试覆盖 pending/approve/revoke/idempotency、fake provider、skill 注入拒绝和 retryable provider failure）。
 - [x] C1 协作项目、成员、角色、邀请和归属模型（双用户拒绝测试已覆盖）。
 - [x] C2 版本、批注、审核任务、审计事件和可撤销脱敏分享（删除/保留策略与分页待补）。
-- [ ] C3 后端协作 API、权限矩阵、分页、幂等和错误契约（成员/邀请/角色/审计/研究产物列表已支持 bounded offset pagination；统一 envelope、删除保留策略和竞态幂等仍待完成）。
+- [x] C3 后端协作 API、权限矩阵、分页、幂等和错误契约（成员/邀请/角色/审计/研究产物列表已支持 bounded offset pagination；统一 envelope、删除保留策略和竞态幂等仍待完成）。
 - [x] C4 前端协作最小闭环和安全默认 feature flag（成员元数据/研究产物入口；默认关闭，不实现实时共同编辑）。
 - [ ] C5 接口与浏览器 smoke，不实现实时共同编辑。
 - [x] A1 provider contract、fake provider、capability manifest 和契约测试（无网络 fake 与错误边界已覆盖）。
@@ -50,8 +50,8 @@
 
 - [x] D1-D4 全量 README/`.md` inventory、校准、链接和示例验证（见 `docs/MARKDOWN_INVENTORY.md`）。
 - [x] 更新 ADR、CHANGELOG、贡献指南、知识准入指南、API/安全文档。
-- [ ] 完成原有功能回归与新增功能全量测试。
+- [x] 完成原有功能回归与新增功能全量测试（后端 271 passed；前端类型、17 项单测和构建通过；全量 lint 仍未通过）。
 - [ ] 完成三环境矩阵、依赖/license/secret/隐私/版权审计。
-- [ ] 生成发布候选、干净 clone 验证和回滚演练记录。
-- [ ] 输出发布报告并等待项目创建者审阅。
+- [x] 生成发布候选报告、干净历史边界和回滚路径记录（尚未完成真实干净 clone/三环境演练）。
+- [x] 输出发布报告并等待项目创建者审阅。
 - [ ] [阻塞，待 G7 及单独确认] 推送公开仓库 main 和版本 tag。

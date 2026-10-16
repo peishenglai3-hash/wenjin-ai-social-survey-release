@@ -9,6 +9,7 @@ Usage:
 """
 import json
 import logging
+import math
 from datetime import datetime, timedelta
 
 from sqlalchemy import func, select, text
@@ -17,6 +18,39 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.analytics import AnalyticsEvent
 
 logger = logging.getLogger(__name__)
+
+_SAFE_PROPERTY_KEYS = frozenset({
+    "page", "url", "query_length", "filter_keys", "result_count",
+    "mode", "feature", "status", "source", "duration_ms",
+})
+_SAFE_FILTER_KEYS = frozenset({"langPref", "methodFilter", "yearFrom", "yearTo", "method"})
+
+
+def _sanitize_properties(properties: object) -> dict:
+    """Keep analytics metadata bounded and reject arbitrary user content."""
+    if not isinstance(properties, dict):
+        return {}
+    safe: dict = {}
+    for raw_key, value in list(properties.items())[:20]:
+        key = str(raw_key)
+        if key not in _SAFE_PROPERTY_KEYS:
+            continue
+        if key == "filter_keys":
+            if isinstance(value, list):
+                safe[key] = [
+                    item for item in value
+                    if isinstance(item, str) and item in _SAFE_FILTER_KEYS
+                ][:10]
+            continue
+        if isinstance(value, bool):
+            safe[key] = value
+        elif isinstance(value, (int, float)) and not isinstance(value, bool):
+            number = float(value)
+            if math.isfinite(number):
+                safe[key] = max(-100_000, min(100_000, int(number)))
+        elif isinstance(value, str):
+            safe[key] = value.strip()[:120]
+    return safe
 
 
 class AnalyticsService:
@@ -34,7 +68,7 @@ class AnalyticsService:
         try:
             record = AnalyticsEvent(
                 event_name=event_name,
-                properties=json.dumps(properties or {}, ensure_ascii=False),
+                properties=json.dumps(_sanitize_properties(properties), ensure_ascii=False),
                 user_id=user_id,
                 session_id=session_id,
             )
@@ -56,7 +90,7 @@ class AnalyticsService:
                 record = AnalyticsEvent(
                     event_name=evt.get("event_name", "unknown"),
                     properties=json.dumps(
-                        evt.get("properties", {}), ensure_ascii=False
+                        _sanitize_properties(evt.get("properties", {})), ensure_ascii=False
                     ),
                     user_id=evt.get("user_id"),
                     session_id=evt.get("session_id"),

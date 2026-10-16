@@ -177,8 +177,8 @@ async def login(
 async def send_sms(body: SendSmsRequest):
     """Send a 6-digit SMS verification code.
 
-    Rate-limited: 1 per 60s per phone, 5 per day per phone.
-    In development mode: code is logged to server console.
+    Delivery is disabled unless a real SMS provider is configured. The
+    service never exposes verification codes through logs or responses.
     """
     if not verify_captcha(body.captcha_token, body.captcha_answer):
         raise HTTPException(
@@ -190,7 +190,7 @@ async def send_sms(body: SendSmsRequest):
     success = await sms.send_verification(body.phone)
     if not success:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to send SMS — please try again",
         )
     return {

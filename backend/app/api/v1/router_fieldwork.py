@@ -6,7 +6,7 @@ import time
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, UploadFile, File, Form, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,8 +23,8 @@ from app.models.survey import FieldNote, SurveyProject, SurveySession, UserProfi
 from app.models.upload import UploadedFile
 from app.services.ai import AIService
 from app.services.speech_engine import speech_engine
-from app.services.emotion_tracker import emotion_tracker
-from app.services.realtime_pipeline import realtime_pipeline
+from app.services.emotion_tracker import EmotionTracker, emotion_timeline_store
+from app.services.realtime_pipeline import RealtimePipeline
 from app.services.interview_analyzer import interview_analyzer
 from app.services.volcano_emotion import volcano_emotion
 from app.services.fieldnote_service import generate_field_notes, list_notes, update_note, delete_note, export_notes
@@ -786,16 +786,25 @@ async def transcribe_enhanced(file: UploadFile = File(...), language: str = Form
             'transcript': result.text,
             'segments': [{'start_ms':s.start_ms,'end_ms':s.end_ms,'speaker_id':s.speaker_id,'speaker_label':s.speaker_label,'text':s.text,'emotion':s.emotion,'emotion_confidence':s.emotion_confidence} for s in result.segments],
         }
-    except Exception as e:
-        logger.exception(f'Enhanced transcription failed: {e}')
+    except Exception:
+        logger.exception('Enhanced transcription failed')
         return {'status':'failed','file_id':file_id,'error':'Transcription failed'}
+    finally:
+        # This endpoint is synchronous and has no later processing step; do
+        # not leave raw audio behind in the upload directory.
+        filepath.unlink(missing_ok=True)
 
 @router.post('/fieldwork/analyze-deep')
 async def analyze_interview_deep(payload: dict):
     transcript = payload.get('transcript','')
-    if not transcript.strip():
+    if not isinstance(transcript, str) or not transcript.strip():
         return {'error':'transcript is required'}
-    a = await interview_analyzer.analyze(transcript=transcript, segments=payload.get('segments',[]), emotion_timeline=payload.get('emotion_timeline'), theme=payload.get('theme','academic'))
+    if len(transcript) > 100_000:
+        raise HTTPException(status_code=413, detail='Transcript exceeds the 100000 character limit')
+    segments = payload.get('segments', [])
+    if not isinstance(segments, list) or len(segments) > 1000:
+        raise HTTPException(status_code=413, detail='Too many transcript segments')
+    a = await interview_analyzer.analyze(transcript=transcript, segments=segments, emotion_timeline=payload.get('emotion_timeline'), theme=payload.get('theme','academic'))
     return {
         'overall_mood':a.overall_mood,'mood_stability':a.mood_stability,'emotional_peaks':a.emotional_peaks,
         'core_themes':a.core_themes,'key_quotes':a.key_quotes,'contradictions':a.contradictions,
@@ -807,8 +816,10 @@ async def analyze_interview_deep(payload: dict):
 @router.post('/fieldwork/cross-analyze')
 async def cross_analyze_interviews(payload: dict):
     interviews = payload.get('interviews',[])
-    if not interviews: return {'error':'interviews list required'}
+    if not isinstance(interviews, list) or not interviews: return {'error':'interviews list required'}
     if len(interviews) > 10: return {'error':'Max 10 interviews per batch'}
+    if any(len(str(interview.get('transcript', ''))) > 100_000 for interview in interviews if isinstance(interview, dict)):
+        raise HTTPException(status_code=413, detail='Interview transcript exceeds the 100000 character limit')
     r = await interview_analyzer.cross_analyze(interviews, theme=payload.get('theme','academic'))
     return {'interview_count':r.interview_count,'shared_themes':r.shared_themes,'divergent_themes':r.divergent_themes,'emotion_comparison':r.emotion_comparison,'saturation_assessment':r.saturation_assessment,'overall_insights':r.overall_insights}
 
@@ -824,13 +835,19 @@ async def fieldwork_pipeline_ws(ws: WebSocket):
 
     Server returns JSON: transcript segments, emotion_alerts, coach_hints, summaries.
     """
-    if await accept_authenticated_websocket(ws) is None:
+    user = await accept_authenticated_websocket(ws)
+    if user is None:
         return
-    params = {}
-    if '?' in str(ws.url):
-        qs = str(ws.url).split('?')[-1]
-        params = dict(p.split('=') for p in qs.split('&') if '=' in p)
-    await realtime_pipeline.handle(ws, session_id=params.get('session_id',''), scenario=params.get('scenario','community_interview'), theme=params.get('theme','academic'), phase=params.get('phase','opening'))
+    params = ws.query_params
+    pipeline = RealtimePipeline()
+    await pipeline.handle(
+        ws,
+        session_id=params.get('session_id', ''),
+        scenario=params.get('scenario', 'community_interview'),
+        theme=params.get('theme', 'academic'),
+        phase=params.get('phase', 'opening'),
+        owner_id=user.id,
+    )
 
 
 @router.websocket('/fieldwork/facial')
@@ -840,32 +857,50 @@ async def fieldwork_facial_ws(ws: WebSocket):
     Client sends: {"type": "facial_signal", "signal": {FacialSignal...}}
     Server returns: {"type": "emotion_alert", ...} when an alert triggers.
 
-    Uses the shared emotion_tracker singleton — coexists with /pipeline for bimodal fusion.
+    Tracker state is scoped to this WebSocket connection. Completed timelines
+    are retained briefly in an owner-scoped in-memory store for the HTTP API.
     """
-    if await accept_authenticated_websocket(ws) is None:
+    user = await accept_authenticated_websocket(ws)
+    if user is None:
         return
-    session_id = f"facial_{int(time.time())}"
-    emotion_tracker.start_session(session_id)
+    tracker = EmotionTracker(sample_interval_s=5.0, user_id=user.id)
+    session_id = f"facial_{uuid.uuid4().hex[:12]}"
+    tracker.start_session(session_id)
     logger.info(f"Facial WS session started: {session_id}")
+    message_count = 0
+    rate_window_started = time.monotonic()
 
     try:
         while True:
             data = await ws.receive_text()
+            now = time.monotonic()
+            if now - rate_window_started >= 60:
+                rate_window_started = now
+                message_count = 0
+            message_count += 1
+            if message_count > 600:
+                await ws.send_json({"type": "error", "message": "WebSocket message rate exceeded"})
+                await ws.close(code=1013)
+                break
+            if len(data.encode("utf-8")) > 32 * 1024:
+                await ws.send_json({"type": "error", "message": "Text frame too large"})
+                await ws.close(code=1009)
+                break
             msg = json.loads(data)
             if msg.get("type") == "facial_signal":
                 signal = msg.get("signal", {})
                 if signal:
-                    sample = emotion_tracker.feed_facial(signal)
+                    sample = tracker.feed_facial(signal)
                     if sample:
-                        alert = emotion_tracker.current_alert()
+                        alert = tracker.current_alert()
                         if alert:
                             await ws.send_json({
                                 "type": "emotion_alert",
-                                "emotion": emotion_tracker.get_recent_emotion(window_s=30),
+                                "emotion": tracker.get_recent_emotion(window_s=30),
                                 "message": alert.message,
                                 "suggested_action": alert.suggested_action,
                                 "urgency": alert.urgency,
-                                "timestamp_ms": int((time.time() - emotion_tracker._started_at) * 1000),
+                                "timestamp_ms": int((time.time() - tracker._started_at) * 1000),
                             })
             elif msg.get("type") == "ping":
                 await ws.send_json({"type": "pong"})
@@ -874,7 +909,8 @@ async def fieldwork_facial_ws(ws: WebSocket):
     except Exception as e:
         logger.warning(f"Facial WS error: {e}")
     finally:
-        timeline = emotion_tracker.end_session()
+        timeline = tracker.end_session()
+        emotion_timeline_store.put(session_id, user.id, timeline)
         try:
             await ws.send_json({
                 "type": "session_ended",
@@ -887,8 +923,10 @@ async def fieldwork_facial_ws(ws: WebSocket):
             pass
 
 @router.get('/fieldwork/emotion-timeline/{session_id}')
-async def get_emotion_timeline(session_id: str):
-    t = emotion_tracker.get_timeline()
+async def get_emotion_timeline(session_id: str, user: UserAccount = Depends(require_user)):
+    t = emotion_timeline_store.get(session_id, user.id)
+    if t is None:
+        raise HTTPException(status_code=404, detail="Emotion timeline not found")
     return {'session_id':session_id,'overall_mood':t.overall_mood,'mood_stability':t.mood_stability,'emotional_peaks':t.emotional_peaks,'samples':[{'timestamp_ms':s.timestamp_ms,'fused_emotion':s.fused_emotion,'fused_intensity':s.fused_intensity} for s in t.samples]}
 
 @router.get('/fieldwork/volcano-status')

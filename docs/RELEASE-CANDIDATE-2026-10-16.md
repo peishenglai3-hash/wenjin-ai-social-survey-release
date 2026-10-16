@@ -3,12 +3,12 @@
 状态：`release candidate`，不是公开发布批准。
 
 当前分支：`codex/wenjin-evolution-v2`  
-候选报告基线提交：`3f2ccaa`（本报告作为后续文档提交加入候选分支）  
+本次候选审计基于 `6e6a6ad` 之后的本地工作树；最终审计提交哈希以本地 `git log` 为准。
 公开仓库 `main`：未修改、未推送。原 `ai-social-survey` master 基线：`c759f6f415a55c3f66efde17627b57c5415b1791`。
 
 ## 1. 结论摘要
 
-当前候选已经完成一轮可运行的安全、知识准入、WISE、协作研究和 Open API 演进，稳定核心代码路径没有因新架构被删除。与原 master 的代码文件结构对照显示：原有 `frontend/src` 文件全部保留，并新增协作 API/页面；原有 `backend/app` 中被移出的 7 个文件全部是历史知识卡片/manifest 数据，而不是业务代码；其余后端新增内容主要是权限、安全、迁移、协作、WISE 和 provider contract。
+当前候选已经完成一轮可运行的安全、知识准入、WISE、协作研究和 Open API 演进，稳定核心代码路径没有因新架构被删除。与私有备份中原 master 的路径和功能边界对照显示：原有 `frontend/src` 文件全部保留，并新增协作 API/页面；原有 `backend/app` 中被移出的 7 个文件全部是历史知识卡片/manifest 数据，而不是业务代码；其余后端新增内容主要是权限、安全、迁移、协作、WISE 和 provider contract。当前候选仓库不含原 master 对象，不能把本地 Git diff 误报为对该 SHA 的直接对象级比较。
 
 因此可以给出：
 
@@ -37,6 +37,8 @@
 - request ID、通用错误边界、provider fail-closed、CORS/代理边界和多组对象归属校验。
 - refresh token 改为 HttpOnly Cookie + 服务端摘要，浏览器 access token 仅内存保存，响应不返回 refresh token 原文。
 - 上传大小/签名/归属/保留元数据、URL/SSRF 和实时 WebSocket bearer 子协议边界。
+- 修复实时情绪/时间线的跨用户模块级状态泄漏；实时 pipeline、情绪 tracker 和时间线存储均按连接/用户隔离，并增加帧大小、消息速率和文本上限。
+- SMS 未配置或 provider 不可用时 fail-closed，不再生成、接受或记录可复用验证码；Open API 输入、分析属性、音频/转录和批量边界均有上限。
 - CI 已包含 `pip check`、compile、Alembic upgrade/check、diff whitespace 和高置信度凭据扫描。
 
 ### 知识、prompt 与 WISE
@@ -62,28 +64,31 @@
 
 | 检查 | 结果 | 说明 |
 | --- | --- | --- |
-| 后端全量 | 264 passed | 49.49s，2 个既有 Pydantic deprecation warnings |
+| 后端全量 | 271 passed | 54.28s，2 个既有 Pydantic deprecation warnings |
 | 知识准入专项 | 12 passed | 包含未知字段、越界、路径、注入标记、双语 metadata 和 runtime 只读 manifest |
 | 后端 compile | passed | `python -m compileall -q app` |
 | 依赖图 | passed | `pip check` 无 broken requirements |
-| SQLite migration | passed | 空库 `alembic upgrade head` + `alembic check`，含知识 metadata migration |
-| 前端类型/单测 | passed | `tsc -b`，Vitest 3 files / 14 tests |
+| 启动 smoke | passed | Uvicorn 返回 `status=ok`、`version=0.5.0` |
+| SQLite migration | passed | `alembic upgrade head` + `alembic check` + `alembic upgrade head --sql`，含知识 metadata migration |
+| 前端类型/单测 | passed | `tsc --noEmit`，Vitest 4 files / 17 tests |
 | 前端 build | passed with warning | Vite build 成功；最大压缩 vendor chunk 约 1.29 MB |
 | 新协作文件 lint | passed | 协作页面/API/config 定向 ESLint 通过 |
-| 全前端 lint | not passed | 104 errors、16 warnings；主要是历史 `any`、effect 规则和 Fast Refresh 规则，不能假装为绿色 |
+| 全前端 lint | not passed | 97 errors、16 warnings；主要是历史 `any`、effect 规则和 Fast Refresh 规则，不能假装为绿色 |
 | npm 依赖审计 | passed | `npm audit --offline --audit-level=high`：0 vulnerabilities |
-| 当前树凭据扫描 | passed | CI 高置信度模式未命中；不替代历史扫描和供应商侧轮换 |
-| Markdown 链接 | passed | 公开文档 inventory 覆盖 30 个文件，当前相对链接无缺失目标 |
+| 前端窄屏审计 | passed with boundary | 320px/768px 视口截图通过；后端未联机，API 404 不能当作集成通过 |
+| 当前树凭据扫描 | passed | 当前树及可达 49 个提交的高置信度模式未命中；不替代历史扫描和供应商侧轮换 |
+| Markdown 链接 | passed | 公开文档 inventory 覆盖 30 个 Markdown/README 文件，当前相对链接无缺失目标 |
 | Docker/Compose | not run | 当前验证环境未安装 Docker |
 | Playwright 浏览器 smoke | not run | npm 包存在，但本机未安装 Chromium executable |
+| pip-audit/SBOM/Trivy | not run | 当前环境没有可用的在线依赖审计、SBOM 或镜像扫描工具；不能据此宣称供应链清零 |
 
 ## 5. 仍需项目创建者审阅的阻塞项
 
 1. 知识候选的版权/再分发权、翻译质量、场域适配和伦理边界仍需人工批准；在此之前不能生成 `approved` manifest，也不能把原训练书籍/切片恢复到公开树。
 2. 全前端 lint 尚未通过；应在独立质量切片中治理历史问题，不能通过关闭规则或删测试放行。
-3. PostgreSQL + Redis、Docker Compose、真实浏览器/PWA、生产 HTTPS/CORS/CSP 和上传保留清理还没有本机成功证据。
-4. 完整 dependency/license inventory、Git 历史 secret scan 和第三方材料权利清单仍需 CI/人工复核。
-5. 协作批量审核、删除/保留策略、统一错误 envelope，以及 Open API token lifecycle/webhook/公共 streaming/完整 typed SDK 仍不属于本候选的完成范围。
+3. PostgreSQL + Redis、Docker Compose、真实浏览器/PWA、生产 HTTPS/CORS/CSP/HSTS 和上传保留清理还没有本机成功证据。
+4. 多实例部署下的配额原子性、若干非实时 AI 路由的统一 `user_id`/成本熔断、完整数据导出/删除保留策略、DNS rebinding/SSRF 防护、依赖 lock/audit/SBOM 仍需部署级复核。
+5. 服务端 BYOK 已实现，但它仍是部署者后端环境配置，不是让浏览器把 provider key 直接交给公共 API；ORCID/技能市场的外部审查和完整 typed SDK、webhook、公共 streaming 仍不属于本候选完成范围。
 
 ## 6. 发布建议与回滚
 

@@ -135,6 +135,7 @@ export default function Copilot() {
               <button
                 onClick={() => setMinimized(true)}
                 title="最小化"
+                aria-label="最小化 AI 助手"
                 className="copilot-header-btn"
               >
                 ▾
@@ -142,6 +143,7 @@ export default function Copilot() {
               <button
                 onClick={() => { setOpen(false); setMessages([]); }}
                 title="关闭"
+                aria-label="关闭 AI 助手"
                 className="copilot-header-btn"
               >
                 ✕
@@ -199,6 +201,7 @@ export default function Copilot() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
+              aria-label="输入问题"
               placeholder="输入你的问题..."
               disabled={streaming}
               className="copilot-input"

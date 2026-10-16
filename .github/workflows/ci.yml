@@ -11,7 +11,19 @@ jobs:
   backend:
     runs-on: ubuntu-latest
     env:
-      JWT_SECRET: ci-only-test-secret-please-do-not-use-in-production-20261015
+      # Deterministic per-run test value; this is not a deployment credential.
+      JWT_SECRET: ${{ github.run_id }}-${{ github.run_attempt }}-wenjin-test-only-not-production
+      # Keep CI provider-free and offline; route accidental calls to a closed
+      # loopback port instead of any real upstream endpoint.
+      DEEPSEEK_API_KEY: ""
+      QWEN_API_KEY: ""
+      VOLCANO_API_KEY: ""
+      HUNYUAN_API_KEY: ""
+      DEEPSEEK_BASE_URL: http://127.0.0.1:9/v1
+      QWEN_BASE_URL: http://127.0.0.1:9/v1
+      VOLCANO_BASE_URL: http://127.0.0.1:9/v1
+      HUNYUAN_BASE_URL: http://127.0.0.1:9/v1
+      NO_PROXY: 127.0.0.1,localhost
     defaults:
       run:
         working-directory: backend
@@ -42,6 +54,7 @@ jobs:
         run: |
           alembic upgrade head
           alembic check
+          alembic upgrade head --sql > /tmp/wenjin-migration.sql
 
       - name: Run unit tests
         run: python -m pytest tests/ -v --tb=short
@@ -71,6 +84,9 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Dependency security audit
+        run: npm audit --audit-level=high
 
   repository-hygiene:
     runs-on: ubuntu-latest

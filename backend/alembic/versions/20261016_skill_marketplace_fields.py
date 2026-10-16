@@ -7,7 +7,7 @@ Create Date: 2026-10-16
 
 from typing import Sequence, Union
 
-from alembic import op
+from alembic import context, op
 import sqlalchemy as sa
 
 
@@ -35,16 +35,22 @@ _COLUMNS = {
 
 
 def upgrade() -> None:
-    inspector = sa.inspect(op.get_bind())
-    existing = {column["name"] for column in inspector.get_columns("user_skills")}
+    if context.is_offline_mode():
+        existing: set[str] = set()
+    else:
+        inspector = sa.inspect(op.get_bind())
+        existing = {column["name"] for column in inspector.get_columns("user_skills")}
     for name, column in _COLUMNS.items():
         if name not in existing:
             op.add_column("user_skills", column)
 
 
 def downgrade() -> None:
-    inspector = sa.inspect(op.get_bind())
-    existing = {column["name"] for column in inspector.get_columns("user_skills")}
+    if context.is_offline_mode():
+        existing: set[str] = set()
+    else:
+        inspector = sa.inspect(op.get_bind())
+        existing = {column["name"] for column in inspector.get_columns("user_skills")}
     for name in reversed(tuple(_COLUMNS)):
         if name in existing:
             op.drop_column("user_skills", name)

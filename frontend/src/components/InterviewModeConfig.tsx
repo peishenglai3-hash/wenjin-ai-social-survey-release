@@ -98,6 +98,16 @@ export default function InterviewModeConfig({ selected, onSelect }: Props) {
             <div
               key={mode.id}
               onClick={() => onSelect(mode)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelect(mode);
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label={`选择访谈模式：${mode.name}`}
+              aria-pressed={isActive}
               style={{
                 padding: "14px 16px",
                 border: isActive

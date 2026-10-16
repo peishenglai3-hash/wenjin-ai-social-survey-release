@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     debug: bool = False
+    # Local-only schema bootstrap escape hatch. Shared and production
+    # databases must be migrated explicitly with Alembic.
+    auto_create_schema: bool = False
 
     # CORS
     cors_origins: list[str] = [
@@ -75,6 +78,7 @@ class Settings(BaseSettings):
     open_api_enabled: bool = True
     open_api_fake_enabled: bool = False
     open_api_max_messages: int = 64
+    open_api_max_input_chars: int = 200_000
     open_api_max_tokens: int = 8192
     open_api_daily_request_quota: int = 1000
     open_api_daily_token_quota: int = 100_000
@@ -101,6 +105,13 @@ class Settings(BaseSettings):
     # ── Emotion Tracking ──
     emotion_sample_interval_s: float = 5.0
     emotion_enabled: bool = True
+
+    # ── SMS provider (optional; routes fail closed when unset) ──
+    sms_access_key_id: str = ""
+    sms_access_key_secret: str = ""
+    sms_sign_name: str = "问津平台"
+    sms_template_code: str = "SMS_000000000"
+    sms_endpoint: str = "dysmsapi.aliyuncs.com"
 
     # ── Realtime Pipeline ──
     realtime_summary_interval_s: int = 120

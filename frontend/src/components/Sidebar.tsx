@@ -83,7 +83,11 @@ export default function Sidebar() {
   const toggle = (label: string) => {
     setOpenPhases((prev) => {
       const next = new Set(prev);
-      next.has(label) ? next.delete(label) : next.add(label);
+      if (next.has(label)) {
+        next.delete(label);
+      } else {
+        next.add(label);
+      }
       return next;
     });
   };
@@ -92,29 +96,39 @@ export default function Sidebar() {
     <aside className="app-sidebar">
       <div className="sidebar-brand">AI 社会调查</div>
       <nav className="sidebar-nav">
-        {phases.filter((phase) => !phase.feature || config.collaborationV1Enabled).map((phase) => (
-          <div key={phase.label} className="phase-group">
-            <button className="phase-header" onClick={() => toggle(phase.label)}>
-              <span className="phase-icon">{phase.icon}</span>
-              <span className="phase-label">{phase.label}</span>
-              <span className={`phase-arrow ${openPhases.has(phase.label) ? "open" : ""}`}>▾</span>
-            </button>
-            {openPhases.has(phase.label) && (
-              <div className="phase-items">
-                {phase.items.map((item) => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    end={item.path === "/"}
-                    className={({ isActive }) => `phase-item ${isActive ? "active" : ""}`}
-                  >
-                    {item.label}
-                  </NavLink>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
+        {phases.filter((phase) => !phase.feature || config.collaborationV1Enabled).map((phase, phaseIndex) => {
+          const isOpen = openPhases.has(phase.label);
+          const itemsId = `sidebar-phase-items-${phaseIndex}`;
+          return (
+            <div key={phase.label} className="phase-group">
+              <button
+                type="button"
+                className="phase-header"
+                onClick={() => toggle(phase.label)}
+                aria-expanded={isOpen}
+                aria-controls={itemsId}
+              >
+                <span className="phase-icon">{phase.icon}</span>
+                <span className="phase-label">{phase.label}</span>
+                <span className={`phase-arrow ${isOpen ? "open" : ""}`}>▾</span>
+              </button>
+              {isOpen && (
+                <div id={itemsId} className="phase-items">
+                  {phase.items.map((item) => (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      end={item.path === "/"}
+                      className={({ isActive }) => `phase-item ${isActive ? "active" : ""}`}
+                    >
+                      {item.label}
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
         {user?.role === "admin" && (
           <NavLink
             to="/admin"
@@ -145,8 +159,11 @@ export default function Sidebar() {
           {themeOptions.map((opt) => (
             <button
               key={opt.id}
+              type="button"
               onClick={() => setTheme(opt.id)}
               title={opt.label}
+              aria-label={`切换到${opt.label}风格`}
+              aria-pressed={theme === opt.id}
               style={{
                 flex: 1,
                 padding: "6px 4px",
