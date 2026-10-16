@@ -146,8 +146,17 @@ async def get_relevant_cards(
 
 
 @router.get("/cards/{card_id}")
-async def get_card(card_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(KnowledgeCard).where(KnowledgeCard.id == card_id))
+async def get_card(
+    card_id: int,
+    profile: UserProfile = Depends(get_current_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(KnowledgeCard).where(
+            KnowledgeCard.id == card_id,
+            KnowledgeCard.profile_id == profile.id,
+        )
+    )
     card = result.scalar_one_or_none()
     if not card:
         return {"error": "Card not found"}
@@ -163,8 +172,17 @@ async def get_card(card_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/cards/{card_id}/reuse")
-async def mark_card_reuse(card_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(KnowledgeCard).where(KnowledgeCard.id == card_id))
+async def mark_card_reuse(
+    card_id: int,
+    profile: UserProfile = Depends(get_current_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(KnowledgeCard).where(
+            KnowledgeCard.id == card_id,
+            KnowledgeCard.profile_id == profile.id,
+        )
+    )
     card = result.scalar_one_or_none()
     if not card:
         return {"error": "Card not found"}
@@ -174,8 +192,17 @@ async def mark_card_reuse(card_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.delete("/cards/{card_id}")
-async def delete_card(card_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(KnowledgeCard).where(KnowledgeCard.id == card_id))
+async def delete_card(
+    card_id: int,
+    profile: UserProfile = Depends(get_current_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(KnowledgeCard).where(
+            KnowledgeCard.id == card_id,
+            KnowledgeCard.profile_id == profile.id,
+        )
+    )
     card = result.scalar_one_or_none()
     if not card:
         return {"error": "Card not found"}
