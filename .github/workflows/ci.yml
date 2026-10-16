@@ -30,6 +30,19 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-asyncio httpx aiosqlite
 
+      - name: Verify installed dependency graph
+        run: python -m pip check
+
+      - name: Compile backend
+        run: python -m compileall -q app
+
+      - name: Migration smoke and drift check
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///./ci-migration.sqlite
+        run: |
+          alembic upgrade head
+          alembic check
+
       - name: Run unit tests
         run: python -m pytest tests/ -v --tb=short
 
@@ -58,3 +71,21 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  repository-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check patch whitespace
+        run: git diff --check
+
+      - name: Scan high-confidence credential patterns
+        shell: bash
+        run: |
+          if rg -n --hidden --glob '!.git/**' --glob '!**/node_modules/**' \
+            --glob '!backend/.env.example' --glob '!**/*.lock' \
+            '(sk-[A-Za-z0-9]{20,}|AIzaSy[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]+ PRIVATE KEY-----)' .; then
+            echo 'Potential credential pattern found; review before merge.'
+            exit 1
+          fi

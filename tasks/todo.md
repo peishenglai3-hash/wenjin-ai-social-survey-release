@@ -20,7 +20,7 @@
 - [ ] P1 配置、启动失败、错误 envelope、request ID 和日志脱敏。
 - [ ] P2 认证、CORS、JWT/token 存储、对象归属、上传和 SSRF 边界（认证 Cookie/摘要、离线队列隐私、编码/反射/场景及多组对象归属已完成第一轮，响应兼容字段、CORS、真实 PWA 验收、协作成员角色和全局上传生命周期仍待完成）。
 - [ ] P3 数据库迁移、SQLite/PostgreSQL、Redis 和 Compose 环境（Alembic drift 首个 revision 与显式迁移启动链已完成，已有库/PostgreSQL/健康依赖仍待验收）。
-- [ ] P4 CI lint/type/test/build/security/license/secret gates。
+- [ ] P4 CI lint/type/test/build/security/license/secret gates（已加入 compile、pip check、Alembic drift、diff whitespace 和高置信度 credential scan；lint、依赖漏洞、license、OpenAPI 与 Docker smoke 仍待完成）。
 
 ## 知识流水线
 
