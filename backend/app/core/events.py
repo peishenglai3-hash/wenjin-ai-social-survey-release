@@ -2,70 +2,55 @@ from contextlib import asynccontextmanager
 import logging
 
 from fastapi import FastAPI
-from sqlalchemy import text
 
+from app.config import settings
 from app.models.base import Base
-from app.models import iteration  # noqa: F401 — ensure iteration KB tables created
-from app.models import knowledge_card  # noqa: F401 — M.4 knowledge cards + skills clusters
-from app.models import survey  # noqa: F401 — ensure all survey models loaded (incl. ScenarioDesign)
-from app.models import user  # noqa: F401 — ensure UserAccount table created
-from app.models import analytics  # noqa: F401 — analytics events table
+from app.models import iteration  # noqa: F401 — ensure iteration KB tables loaded
+from app.models import knowledge_card  # noqa: F401 — knowledge cards + skills clusters
+from app.models import survey  # noqa: F401 — all survey models loaded
+from app.models import user  # noqa: F401 — UserAccount table loaded
+from app.models import analytics  # noqa: F401 — analytics events table loaded
 
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup — create tables
-    from app.core.database import async_session_factory, engine
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        # Add columns that may not exist in existing databases (lightweight migration)
-        migrations = [
-            "ALTER TABLE user_profiles ADD COLUMN theme_preference VARCHAR(20) DEFAULT 'academic'",
-            "ALTER TABLE user_profiles ADD COLUMN user_id INTEGER REFERENCES user_accounts(id)",
-            # ── Researcher Community (v0.5.0) ──
-            "ALTER TABLE user_skills ADD COLUMN published_at TIMESTAMP",
-            "ALTER TABLE user_skills ADD COLUMN published_version VARCHAR(20) DEFAULT '1.0.0'",
-            "ALTER TABLE user_skills ADD COLUMN fork_count INTEGER DEFAULT 0",
-            "ALTER TABLE user_skills ADD COLUMN rating_avg REAL DEFAULT 0.0",
-            "ALTER TABLE user_skills ADD COLUMN rating_count INTEGER DEFAULT 0",
-            "ALTER TABLE user_skills ADD COLUMN download_count INTEGER DEFAULT 0",
-            "ALTER TABLE user_skills ADD COLUMN readme TEXT",
-            "ALTER TABLE user_skills ADD COLUMN example_input TEXT",
-            "ALTER TABLE user_skills ADD COLUMN example_output TEXT",
-            "ALTER TABLE user_skills ADD COLUMN compatible_models VARCHAR(200) DEFAULT '[]'",
-            "ALTER TABLE user_skills ADD COLUMN min_app_version VARCHAR(20) DEFAULT '0.2.0'",
-            "ALTER TABLE user_skills ADD COLUMN forked_from_id INTEGER",
-            "ALTER TABLE user_skills ADD COLUMN fork_lineage VARCHAR(500) DEFAULT '[]'",
-        ]
-        for stmt in migrations:
-            try:
-                await conn.execute(text(stmt))
-            except Exception:
-                logger.debug("Migration skipped (column likely exists): %s", stmt[:80])
+    """Start services after the schema has been prepared explicitly.
 
-    # Seed iteration knowledge base (idempotent)
+    Alembic owns shared/production schema changes. AUTO_CREATE_SCHEMA is a
+    deliberate local-development escape hatch and does not run ALTER statements
+    that can hide migration drift.
+    """
+    from app.core.database import async_session_factory, engine
+
+    if settings.auto_create_schema:
+        logger.warning(
+            "AUTO_CREATE_SCHEMA is enabled; use Alembic for shared or production databases"
+        )
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    else:
+        logger.info("Automatic schema creation disabled; expecting `alembic upgrade head`")
+
+    # Seed iteration knowledge base (idempotent).
     try:
         from app.services.iteration_kb import seed_dashscope_debugging
+
         async with async_session_factory() as db:
             await seed_dashscope_debugging(db)
     except Exception:
-        logger.warning(
-            "Failed to seed iteration KB (this is non-fatal)", exc_info=True
-        )
+        logger.warning("Failed to seed iteration KB (this is non-fatal)", exc_info=True)
 
-    # Seed knowledge cards + skills clusters on startup (idempotent)
+    # Seed knowledge cards + skills clusters on startup (idempotent).
     try:
         from app.services.knowledge_ingestion import ingest_all as seed_knowledge
+
         async with async_session_factory() as db:
             result = await seed_knowledge(db)
             logger.info("Knowledge cards seeded: %s", result)
     except Exception:
-        logger.warning(
-            "Failed to seed knowledge cards (non-fatal)", exc_info=True
-        )
+        logger.warning("Failed to seed knowledge cards (non-fatal)", exc_info=True)
 
     yield
-    # Shutdown
     await engine.dispose()

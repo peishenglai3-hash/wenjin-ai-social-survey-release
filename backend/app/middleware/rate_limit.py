@@ -4,6 +4,8 @@ Uses Redis sorted-set sliding window in production with seamless
 in-memory fallback when Redis is unavailable.
 """
 
+import ipaddress
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -21,21 +23,63 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     - No configuration change needed — transparent to the rest of the stack
     """
 
-    def __init__(self, app, default_rpm: int = 60, ai_rpm: int = 10, auth_rpm: int = 20):
+    def __init__(
+        self,
+        app,
+        default_rpm: int = 60,
+        ai_rpm: int = 10,
+        auth_rpm: int = 20,
+        enabled: bool = True,
+        trusted_proxy_ips: list[str] | None = None,
+    ):
         super().__init__(app)
         self.default_rpm = default_rpm
         self.ai_rpm = ai_rpm
         self.auth_rpm = auth_rpm
+        self.enabled = enabled
+        self.trusted_proxy_networks = self._parse_trusted_proxies(trusted_proxy_ips or [])
+
+    @staticmethod
+    def _parse_trusted_proxies(values: list[str]) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
+        networks = []
+        for value in values:
+            try:
+                networks.append(ipaddress.ip_network(value, strict=False))
+            except ValueError:
+                continue
+        return tuple(networks)
+
+    def _peer_is_trusted(self, request: Request) -> bool:
+        peer = request.client.host if request.client else ""
+        try:
+            peer_ip = ipaddress.ip_address(peer)
+        except ValueError:
+            return False
+        return any(peer_ip in network for network in self.trusted_proxy_networks)
+
+    @staticmethod
+    def _valid_ip(value: str) -> str | None:
+        try:
+            return str(ipaddress.ip_address(value.strip()))
+        except ValueError:
+            return None
 
     def _get_client_ip(self, request: Request) -> str:
         """Get real client IP, respecting reverse proxy headers."""
+        peer = request.client.host if request.client else "unknown"
+        if not self._peer_is_trusted(request):
+            return peer
         forwarded = request.headers.get("X-Forwarded-For")
         if forwarded:
-            return forwarded.split(",")[0].strip()
+            client_ip = self._valid_ip(forwarded.split(",")[0])
+            if client_ip:
+                return client_ip
         real_ip = request.headers.get("X-Real-IP")
         if real_ip:
-            return real_ip.strip()
-        return request.client.host if request.client else "unknown"
+            client_ip = self._valid_ip(real_ip)
+            if client_ip:
+                return client_ip
+        return peer
 
     def _category(self, path: str) -> tuple[int, str]:
         """Classify the request path into a rate-limit category.
@@ -64,6 +108,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return self.default_rpm, "api"
 
     async def dispatch(self, request: Request, call_next):
+        if not self.enabled:
+            return await call_next(request)
         client_ip = self._get_client_ip(request)
         limit, category = self._category(request.url.path)
         key = f"{client_ip}:{category}"

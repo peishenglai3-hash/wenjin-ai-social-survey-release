@@ -9,7 +9,7 @@ services:
       - ./backend:/app
       - uploads:/tmp/wenjin-uploads
       - db_data:/data
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     depends_on:
       redis:
         condition: service_started

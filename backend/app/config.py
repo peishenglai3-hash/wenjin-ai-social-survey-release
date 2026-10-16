@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     rate_limit_api_per_minute: int = 60
     rate_limit_ai_per_minute: int = 10
     rate_limit_auth_per_minute: int = 20
+    # Only these direct peers may supply X-Forwarded-For/X-Real-IP.
+    trusted_proxy_ips: list[str] = []
 
     # ── AI Provider: DeepSeek (text-heavy tasks: topic, questionnaire, analysis, export) ──
     deepseek_api_key: str = ""

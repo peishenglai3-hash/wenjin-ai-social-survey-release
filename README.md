@@ -38,8 +38,11 @@ cp .env.example .env  # Windows 可手动复制文件
 编辑 `backend/.env`：至少设置一个 AI 供应商 key、一个随机的 `JWT_SECRET`，并把 `CORS_ORIGINS` 限定为本地前端地址。供应商 key 只应存在于后端环境变量中，不能写进前端代码、浏览器存储、日志或提交记录。
 
 ```bash
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
+
+共享或生产数据库必须在启动服务前显式执行 Alembic 迁移；应用默认不会在启动时隐式 `create_all` 或吞掉 `ALTER TABLE` 错误。仅用于一次性本地原型时，才可在 `.env` 中临时设置 `AUTO_CREATE_SCHEMA=true`。
 
 ### 运行前端
 
@@ -59,7 +62,7 @@ cp backend/.env.example backend/.env
 docker compose up --build
 ```
 
-Compose 配置只用于本地实验；生产部署需要自行完成密钥管理、TLS、数据库备份、访问控制、限流、日志脱敏和数据删除流程。
+Compose 配置只用于本地实验，backend 容器会先执行 `alembic upgrade head`；生产部署仍需要自行完成密钥管理、TLS、数据库备份、访问控制、限流、日志脱敏和数据删除流程。
 
 ## BYOK 与数据边界
 

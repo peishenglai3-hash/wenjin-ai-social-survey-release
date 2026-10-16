@@ -47,9 +47,11 @@ app.add_middleware(SecurityHeadersMiddleware)
 # Rate limiting (per-IP sliding window)
 app.add_middleware(
     RateLimitMiddleware,
+    enabled=settings.rate_limit_enabled,
     default_rpm=settings.rate_limit_api_per_minute,
     ai_rpm=settings.rate_limit_ai_per_minute,
     auth_rpm=settings.rate_limit_auth_per_minute,
+    trusted_proxy_ips=settings.trusted_proxy_ips,
 )
 
 # Correlate requests without trusting arbitrary client header values.
@@ -68,7 +70,18 @@ SIZE_LIMITS: dict[str, int] = {
 async def request_size_middleware(request: Request, call_next):
     content_length = request.headers.get("content-length")
     if content_length:
-        size = int(content_length)
+        try:
+            size = int(content_length)
+        except (TypeError, ValueError):
+            return JSONResponse(
+                status_code=400,
+                content={"error": "无效的 Content-Length"},
+            )
+        if size < 0:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "无效的 Content-Length"},
+            )
         path = request.url.path
         limit = 0
         for key, lim in SIZE_LIMITS.items():
