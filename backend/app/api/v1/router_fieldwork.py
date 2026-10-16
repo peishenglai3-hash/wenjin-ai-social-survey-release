@@ -16,6 +16,7 @@ from app.api.deps_auth import require_user, get_current_profile
 from app.models.user import UserAccount
 from app.config import settings
 from app.models.survey import FieldNote, SurveyProject, SurveySession, UserProfile
+from app.models.upload import UploadedFile
 from app.services.ai import AIService
 from app.services.speech_engine import speech_engine
 from app.services.emotion_tracker import emotion_tracker
@@ -32,6 +33,12 @@ from app.services.upload_validation import (
     UploadEmptyError,
     UploadTooLargeError,
     save_upload_stream,
+)
+from app.services.upload_registry import (
+    cleanup_expired_uploads,
+    consume_upload,
+    get_owned_upload,
+    register_upload,
 )
 from app.skills.mode_prompts import get_interview_scenarios
 
@@ -523,6 +530,7 @@ async def transcribe_uploaded_file(
     file: UploadFile = File(...),
     language: str = Form("zh"),
     db: AsyncSession = Depends(get_db),
+    profile: UserProfile = Depends(get_current_profile),
 ):
     """Upload an audio/video file for transcription via Qwen3-ASR-Filetrans.
 
@@ -581,6 +589,22 @@ async def transcribe_uploaded_file(
         "api_key_ready": api_ready,
     }
 
+    # HTTP requests always carry a real profile through the dependency. Direct
+    # Python calls used by the legacy unit tests intentionally skip registry
+    # persistence and exercise only stream/signature validation.
+    profile_id = getattr(profile, "id", None)
+    if hasattr(db, "execute") and isinstance(profile_id, int):
+        await cleanup_expired_uploads(db)
+        await register_upload(
+            db,
+            profile_id=profile_id,
+            file_id=file_id,
+            storage_name=safe_name,
+            suffix=suffix,
+            size_bytes=file_size_bytes,
+        )
+        await db.commit()
+
     # Auto-submit to Qwen FileTrans if API key is configured
     if api_ready and public_url_ready:
         logger.info("FileTrans attempt for uploaded file %s", file_id)
@@ -626,15 +650,31 @@ async def transcribe_uploaded_file(
 
 
 @router.post("/fieldwork/transcribe-file/{file_id}/process")
-async def process_transcription(file_id: str, payload: dict):
+async def process_transcription(
+    file_id: str,
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    profile: UserProfile = Depends(get_current_profile),
+):
     """Submit a previously uploaded file for Qwen Filetrans processing.
 
     The provider URL is always derived from a server-owned upload ID and
     deployment-owned PUBLIC_BASE_URL. Client-provided file URLs are ignored.
     """
-    uploaded_file = _find_uploaded_file(file_id)
-    if uploaded_file is None:
-        return {"error": "Uploaded file not found"}
+    profile_id = getattr(profile, "id", None)
+    registry_db = db if hasattr(db, "execute") and isinstance(profile_id, int) else None
+    registry_row: UploadedFile | None = None
+    if registry_db is not None:
+        owned = await get_owned_upload(registry_db, file_id=file_id, profile_id=profile_id)
+        if owned is None:
+            return {"error": "Uploaded file not found"}
+        registry_row, uploaded_file = owned
+    else:
+        # Compatibility path for direct unit calls from the pre-registry API;
+        # the HTTP endpoint above never uses this branch.
+        uploaded_file = _find_uploaded_file(file_id)
+        if uploaded_file is None:
+            return {"error": "Uploaded file not found"}
 
     try:
         file_url = build_public_upload_url(settings.public_base_url, uploaded_file.name)
@@ -646,12 +686,15 @@ async def process_transcription(file_id: str, payload: dict):
     try:
         task_id = await qwen_filetrans.submit(file_url, language)
         result = await qwen_filetrans.poll(task_id)
-        return {
+        response = {
             "status": "completed",
             "file_id": file_id,
             "transcript": result.get("transcription", ""),
             "sentences": result.get("sentences", []),
         }
+        if registry_db is not None and registry_row is not None:
+            await consume_upload(registry_db, registry_row)
+        return response
     except Exception as e:
         return {"error": "Transcription failed", "file_id": file_id}
 

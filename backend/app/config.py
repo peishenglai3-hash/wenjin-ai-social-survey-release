@@ -124,6 +124,7 @@ class Settings(BaseSettings):
     # File upload
     upload_dir: str = "/tmp/wenjin-uploads"
     max_upload_mb: int = 500
+    upload_retention_hours: int = 24
 
     # Public-facing base URL for file download by third-party APIs (DashScope FileTrans).
     # Set PUBLIC_BASE_URL only in a deployment that intentionally exposes a callback URL.

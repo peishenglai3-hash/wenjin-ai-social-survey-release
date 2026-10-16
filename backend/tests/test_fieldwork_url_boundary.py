@@ -3,9 +3,14 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy import select
 
 from app.api.v1 import router_fieldwork
+from app.api.deps_auth import get_current_profile
+from app.main import app
 from app.config import settings
+from app.models.survey import UserProfile
+from app.models.upload import UploadedFile
 
 
 class NamedUpload:
@@ -101,3 +106,41 @@ async def test_upload_route_rejects_content_extension_mismatch(tmp_path, monkeyp
 
     assert result == {"error": "Uploaded content does not match its file extension"}
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.asyncio
+async def test_http_upload_is_bound_to_current_profile_and_foreign_process_is_hidden(
+    client,
+    db_session,
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "max_upload_mb", 1)
+    monkeypatch.setattr(settings, "public_base_url", "https://research.example.org")
+    monkeypatch.setattr(router_fieldwork.qwen_filetrans, "api_key", "")
+    audio = b"RIFF" + b"\x00\x00\x00\x00" + b"WAVE" + b"x" * 100
+
+    response = await client.post(
+        "/api/v1/fieldwork/transcribe-file",
+        files={"file": ("interview.wav", audio, "audio/wav")},
+    )
+    assert response.status_code == 200
+    file_id = response.json()["file_id"]
+    row = await db_session.scalar(select(UploadedFile).where(UploadedFile.file_id == file_id))
+    assert row is not None
+
+    foreign_profile = UserProfile(user_id=None, role="researcher")
+    db_session.add(foreign_profile)
+    await db_session.commit()
+    await db_session.refresh(foreign_profile)
+    app.dependency_overrides[get_current_profile] = lambda: foreign_profile
+    try:
+        foreign = await client.post(
+            f"/api/v1/fieldwork/transcribe-file/{file_id}/process",
+            json={"file_url": "https://attacker.example/file.wav", "language": "zh"},
+        )
+        assert foreign.status_code == 200
+        assert foreign.json() == {"error": "Uploaded file not found"}
+    finally:
+        app.dependency_overrides.pop(get_current_profile, None)
