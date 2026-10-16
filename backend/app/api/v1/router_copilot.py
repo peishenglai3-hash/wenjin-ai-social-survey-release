@@ -36,6 +36,24 @@ conversation_history: dict[int, list[dict]] = {}
 MAX_HISTORY = 10  # keep last 10 messages (5 rounds)
 
 
+async def _owned_project(
+    db: AsyncSession,
+    project_id: object,
+    profile_id: int,
+) -> SurveyProject | None:
+    try:
+        normalized_id = int(project_id)
+    except (TypeError, ValueError):
+        return None
+    result = await db.execute(
+        select(SurveyProject).where(
+            SurveyProject.id == normalized_id,
+            SurveyProject.profile_id == profile_id,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 PHASE_LABELS = {
     "pre_survey": "调查前（问卷设计/方法论规划阶段）",
     "during_survey": "调查中（田野访谈实施阶段）",
@@ -168,25 +186,28 @@ async def copilot_chat_stream(
     }
 
     if project_id:
-        row = await db.execute(select(SurveyProject).where(SurveyProject.id == int(project_id)))
-        proj = row.scalar_one_or_none()
-        if proj:
-            project_data = {
-                "title": proj.title,
-                "research_direction": proj.research_direction,
-                "phase": proj.phase,
-                "paradigm": proj.paradigm,
-            }
-            session_rows = await db.execute(
-                select(SurveySession)
-                .where(SurveySession.project_id == proj.id)
-                .order_by(SurveySession.id.desc())
-                .limit(3)
-            )
-            for s in session_rows.scalars().all():
-                if s.transcript_text:
-                    snippet = s.transcript_text[-500:] if len(s.transcript_text or "") > 500 else s.transcript_text
-                    recent_sessions.append(snippet)
+        proj = await _owned_project(db, project_id, profile.id)
+        if proj is None:
+            async def error_stream():
+                yield 'data: {"error": "Project not found"}\n\n'
+
+            return StreamingResponse(error_stream(), media_type="text/event-stream")
+        project_data = {
+            "title": proj.title,
+            "research_direction": proj.research_direction,
+            "phase": proj.phase,
+            "paradigm": proj.paradigm,
+        }
+        session_rows = await db.execute(
+            select(SurveySession)
+            .where(SurveySession.project_id == proj.id)
+            .order_by(SurveySession.id.desc())
+            .limit(3)
+        )
+        for s in session_rows.scalars().all():
+            if s.transcript_text:
+                snippet = s.transcript_text[-500:] if len(s.transcript_text or "") > 500 else s.transcript_text
+                recent_sessions.append(snippet)
 
     # ── Retrieve user memories (Hermes-style) ──
     memory_context = ""
@@ -282,15 +303,15 @@ async def copilot_chat(
     }
 
     if project_id:
-        row = await db.execute(select(SurveyProject).where(SurveyProject.id == int(project_id)))
-        proj = row.scalar_one_or_none()
-        if proj:
-            project_data = {
-                "title": proj.title,
-                "research_direction": proj.research_direction,
-                "phase": proj.phase,
-                "paradigm": proj.paradigm,
-            }
+        proj = await _owned_project(db, project_id, profile.id)
+        if proj is None:
+            return {"error": "Project not found"}
+        project_data = {
+            "title": proj.title,
+            "research_direction": proj.research_direction,
+            "phase": proj.phase,
+            "paradigm": proj.paradigm,
+        }
 
     # ── Retrieve user memories ──
     memory_context = ""
