@@ -255,6 +255,22 @@ class UserSkill(Base, TimestampMixin):
     source_dialogue_snippet: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # The original Q&A that inspired this skill (for context)
 
+    # Marketplace metadata used by the existing community router. These fields
+    # are additive and do not change private skill behavior.
+    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    published_version: Mapped[str] = mapped_column(String(30), default="1.0.0")
+    fork_count: Mapped[int] = mapped_column(Integer, default=0)
+    rating_avg: Mapped[float] = mapped_column(Float, default=0.0)
+    rating_count: Mapped[int] = mapped_column(Integer, default=0)
+    download_count: Mapped[int] = mapped_column(Integer, default=0)
+    readme: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    example_input: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    example_output: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    compatible_models: Mapped[str] = mapped_column(String(1000), default="[]")
+    min_app_version: Mapped[str] = mapped_column(String(30), default="0.2.0")
+    forked_from_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    fork_lineage: Mapped[str] = mapped_column(String(2000), default="[]")
+
 
 class ReflectionSession(Base, TimestampMixin):
     """A structured sociological reflexivity dialogue — 反思性会话.
