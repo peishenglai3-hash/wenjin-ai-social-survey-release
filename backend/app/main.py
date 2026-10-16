@@ -25,6 +25,7 @@ from app.core.events import lifespan
 from app.api.v1.router import api_router, protected_api_router
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
+from app.middleware.request_context import RequestContextMiddleware
 
 app = FastAPI(
     title="AI Social Survey API",
@@ -50,6 +51,9 @@ app.add_middleware(
     ai_rpm=settings.rate_limit_ai_per_minute,
     auth_rpm=settings.rate_limit_auth_per_minute,
 )
+
+# Correlate requests without trusting arbitrary client header values.
+app.add_middleware(RequestContextMiddleware)
 
 
 # ── Request size guard ──────────────────────────────────────────────
