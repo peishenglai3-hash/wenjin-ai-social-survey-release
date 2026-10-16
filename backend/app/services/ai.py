@@ -16,6 +16,10 @@ from app.middleware.token_logger import get_user_usage, log_token_usage
 
 logger = logging.getLogger(__name__)
 
+
+class ProviderNotConfiguredError(RuntimeError):
+    """Raised when no server-side provider credentials are available."""
+
 # Task → model routing: Pro for complex reasoning, Flash for lightweight tasks
 TASK_MODELS = {
     "topic": "deepseek-v4-pro",
@@ -119,8 +123,9 @@ class AIService:
         if self.realtime_enabled:
             return self.realtime_api_key, self.realtime_base_url, self.realtime_model
 
-        # Nothing configured — will fail with auth error downstream
-        return self.api_key, self.base_url, self._model_for(task)
+        raise ProviderNotConfiguredError(
+            "No AI provider is configured on the server."
+        )
 
     def _model_for(self, task: str) -> str:
         return TASK_MODELS.get(task, self.model)
@@ -163,7 +168,10 @@ class AIService:
         user_id: int | None = None,
     ) -> str:
         # Resolve provider + model for this task
-        api_key, base_url, routed_model = self._route(task) if task else (self.api_key, self.base_url, self.model)
+        try:
+            api_key, base_url, routed_model = self._route(task)
+        except ProviderNotConfiguredError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         model = model or routed_model
         task_max = self._max_tokens_for(task) if task else 4096
         max_tokens = max(max_tokens, task_max)
@@ -223,7 +231,10 @@ class AIService:
     ) -> AsyncGenerator[str, None]:
         """Stream tokens from the AI provider via SSE."""
         # Resolve provider + model for this task
-        api_key, base_url, routed_model = self._route(task) if task else (self.api_key, self.base_url, self.model)
+        try:
+            api_key, base_url, routed_model = self._route(task)
+        except ProviderNotConfiguredError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         model = model or routed_model
         task_max = self._max_tokens_for(task) if task else 4096
         max_tokens = max(max_tokens, task_max)
@@ -299,7 +310,11 @@ class AIService:
         user_id: int | None = None,
     ) -> str:
         """Send a multimodal request with text + image."""
-        model = model or self.model
+        try:
+            api_key, base_url, routed_model = self._route("image")
+        except ProviderNotConfiguredError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        model = model or routed_model
         self._check_cost_limit(user_id)
         try:
             async with AsyncClient(timeout=120) as client:
@@ -346,12 +361,15 @@ class AIService:
     async def health(self) -> bool:
         """Quick check that the API is reachable and key is valid."""
         try:
+            api_key, base_url, _ = self._route("")
             async with AsyncClient(timeout=5) as client:
                 resp = await client.get(
-                    f"{self.base_url}/models",
-                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    f"{base_url}/models",
+                    headers={"Authorization": f"Bearer {api_key}"},
                 )
                 return resp.status_code == 200
+        except ProviderNotConfiguredError:
+            return False
         except Exception:
             logger.warning("AI provider health check failed", exc_info=True)
             return False
