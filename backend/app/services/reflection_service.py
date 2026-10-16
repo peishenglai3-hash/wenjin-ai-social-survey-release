@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.services.ai import AIService
-from app.services.memory_service import MemoryService
+from app.services.wise_service import WISEService
 
 logger = logging.getLogger(__name__)
 
@@ -497,11 +497,12 @@ class ReflectionService:
         db,
         profile_id: int,
         trigger_type: str = "",
+        project_id: int | None = None,
     ) -> int:
-        """Extract persistent memories from reflection and store via MemoryService.
+        """Turn reflection insights into pending WISE memory proposals.
 
-        The extracted memories get category="reflection" to distinguish them
-        from regular dialogue-extracted memories.
+        AI-derived insights are deliberately not written to long-term memory
+        here.  The user must review and approve each proposal through WISE.
         """
         if not conclusion.get("insights"):
             return 0
@@ -536,10 +537,14 @@ class ReflectionService:
 
         if memories:
             try:
-                saved = await MemoryService.save_memories(
-                    db, profile_id, memories, source="reflection",
+                saved = await WISEService.create_memory_proposals(
+                    db,
+                    profile_id,
+                    memories,
+                    source="reflection",
+                    project_id=project_id,
                 )
-                logger.info("Stored %d reflection memories for profile %d", saved, profile_id)
+                logger.info("Created %d reflection memory proposals for profile %d", saved, profile_id)
                 return saved
             except Exception as e:
                 logger.error("Failed to store reflection memories: %s", e)

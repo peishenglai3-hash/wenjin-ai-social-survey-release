@@ -292,6 +292,7 @@ async def conclude_reflection(
             db=db,
             profile_id=profile_id,
             trigger_type=session_state.get("trigger_type", ""),
+            project_id=session_state.get("project_id"),
         )
 
     # Record iteration insights to DB
@@ -341,6 +342,7 @@ async def conclude_reflection(
         "insights": conclusion["insights"],
         "spectrum_shifts": conclusion["spectrum_shifts"],
         "memory_count": memory_count,
+        "proposal_count": memory_count,
         "insight_count": insight_count,
         "applied_adjustments": applied_adjustments,
         "total_questions": conclusion.get("total_questions", 0),

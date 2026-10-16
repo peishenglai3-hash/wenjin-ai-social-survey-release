@@ -410,8 +410,8 @@ class TestMemoryIntegration:
         db.execute = AsyncMock()
         db.commit = AsyncMock()
 
-        # Patch MemoryService.save_memories to track what it receives
-        with patch("app.services.reflection_service.MemoryService.save_memories", new_callable=AsyncMock) as mock_save:
+        # AI-derived insights now become pending WISE proposals first.
+        with patch("app.services.reflection_service.WISEService.create_memory_proposals", new_callable=AsyncMock) as mock_save:
             mock_save.return_value = 1
             ai = AsyncMock()
             count = await ReflectionService.store_reflection_memories(
@@ -424,9 +424,9 @@ class TestMemoryIntegration:
 
             assert count == 1
             assert mock_save.called
-            # Verify memory category
+            # Verify proposal candidates preserve the reflection category.
             call_args = mock_save.call_args
-            memories = call_args[0][2]  # Third positional arg: memories list
+            memories = call_args.args[2]  # Third positional arg: memories list
             assert memories[0]["category"] == "reflection"
             assert "方法论反思" in memories[0]["value"]
 

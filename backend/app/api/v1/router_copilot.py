@@ -26,6 +26,7 @@ from app.services.ai import AIService
 from app.models.survey import SurveyProject, SurveySession, UserProfile
 from app.services.cluster_router import cluster_router
 from app.services.memory_service import MemoryService
+from app.services.wise_service import WISEService
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +164,7 @@ async def copilot_chat_stream(
 
     theme = payload.get("theme", "academic")
     project_id = payload.get("project_id")
+    project_context_id = None
     extra_context = payload.get("extra_context", "")
 
     profile_data = None
@@ -198,6 +200,7 @@ async def copilot_chat_stream(
             "phase": proj.phase,
             "paradigm": proj.paradigm,
         }
+        project_context_id = proj.id
         session_rows = await db.execute(
             select(SurveySession)
             .where(SurveySession.project_id == proj.id)
@@ -245,8 +248,8 @@ async def copilot_chat_stream(
                 yield f"data: {json.dumps({'token': token})}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
-            logger.error(f"Copilot stream error: {e}")
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            logger.exception("Copilot stream error")
+            yield f"data: {json.dumps({'error': 'AI service unavailable'})}\n\n"
         else:
             history.append({"role": "user", "content": message})
             history.append({"role": "assistant", "content": "".join(full_response)})
@@ -261,7 +264,13 @@ async def copilot_chat_stream(
                     ai, message, assistant_reply, profile_data,
                 )
                 if extracted:
-                    await MemoryService.save_memories(db, profile.id, extracted)
+                    await WISEService.create_memory_proposals(
+                        db,
+                        profile.id,
+                        extracted,
+                        source="ai",
+                        project_id=project_context_id,
+                    )
             except Exception as e:
                 logger.warning("Post-dialogue memory extraction failed: %s", e)
 
@@ -282,6 +291,7 @@ async def copilot_chat(
 
     theme = payload.get("theme", "academic")
     project_id = payload.get("project_id")
+    project_context_id = None
 
     profile_data = None
     project_data = None
@@ -312,6 +322,7 @@ async def copilot_chat(
             "phase": proj.phase,
             "paradigm": proj.paradigm,
         }
+        project_context_id = proj.id
 
     # ── Retrieve user memories ──
     memory_context = ""
@@ -335,7 +346,13 @@ async def copilot_chat(
                 ai, message, result, profile_data,
             )
             if extracted:
-                await MemoryService.save_memories(db, profile.id, extracted)
+                await WISEService.create_memory_proposals(
+                    db,
+                    profile.id,
+                    extracted,
+                    source="ai",
+                    project_id=project_context_id,
+                )
         except Exception as e:
             logger.warning("Post-dialogue memory extraction failed: %s", e)
 

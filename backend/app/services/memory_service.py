@@ -174,11 +174,15 @@ class MemoryService:
         profile_id: int,
         memories: list[dict[str, Any]],
         source: str = "dialogue",
+        commit: bool = True,
     ) -> int:
-        """Upsert extracted memories.  Returns count of new/updated rows.
+        """Upsert explicitly approved memories.  Returns count of changed rows.
 
         Upsert key: (profile_id, category, key) — same key for same profile
         updates the existing row rather than creating a duplicate.
+
+        ``commit=False`` is reserved for the WISE approval transaction so the
+        proposal status and memory promotion commit atomically.
         """
         saved = 0
         for m in memories:
@@ -215,9 +219,13 @@ class MemoryService:
                 db.add(row)
             saved += 1
 
-        if saved:
+        if commit and saved:
             await db.commit()
             logger.info("Saved %d memories for profile %d", saved, profile_id)
+        elif not commit:
+            await db.flush()
+            if saved:
+                logger.info("Prepared %d memories for profile %d", saved, profile_id)
         return saved
 
     # ── Retrieval ───────────────────────────────────────────────────────────
