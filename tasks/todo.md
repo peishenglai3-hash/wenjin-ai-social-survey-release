@@ -34,7 +34,7 @@
 ## WISE、协作与 API
 
 - [x] W1/W2 WISE 提案、审批、撤销、证据和记忆写入门（模型生成的候选记忆先进入 pending；批准事务才写入长期记忆）。
-- [ ] W3 WISE/fake provider/提示注入/失败重试测试。
+- [x] W3 WISE/fake provider/提示注入/失败重试测试（当前后端测试覆盖 pending/approve/revoke/idempotency、fake provider、skill 注入拒绝和 retryable provider failure）。
 - [x] C1 协作项目、成员、角色、邀请和归属模型（双用户拒绝测试已覆盖）。
 - [x] C2 版本、批注、审核任务、审计事件和可撤销脱敏分享（删除/保留策略与分页待补）。
 - [ ] C3 后端协作 API、权限矩阵、分页、幂等和错误契约（成员/邀请/角色/审计/研究产物列表已支持 bounded offset pagination；统一 envelope、删除保留策略和竞态幂等仍待完成）。
@@ -48,8 +48,8 @@
 
 ## 文档与发布
 
-- [ ] D1-D4 全量 README/`.md` inventory、校准、链接和示例验证。
-- [ ] 更新 ADR、CHANGELOG、贡献指南、知识准入指南、API/安全文档。
+- [x] D1-D4 全量 README/`.md` inventory、校准、链接和示例验证（见 `docs/MARKDOWN_INVENTORY.md`）。
+- [x] 更新 ADR、CHANGELOG、贡献指南、知识准入指南、API/安全文档。
 - [ ] 完成原有功能回归与新增功能全量测试。
 - [ ] 完成三环境矩阵、依赖/license/secret/隐私/版权审计。
 - [ ] 生成发布候选、干净 clone 验证和回滚演练记录。

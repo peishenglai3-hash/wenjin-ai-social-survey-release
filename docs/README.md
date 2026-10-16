@@ -2,7 +2,7 @@
 
 公开文档只记录可复用的架构、接口和运行说明。内部申报、组会汇报、阶段性报告、原始研究记录、第三方全文和个人部署资料不放入本仓库。
 
-发布变更见 [`CHANGELOG.md`](../CHANGELOG.md)，贡献与安全边界见 [`CONTRIBUTING.md`](../CONTRIBUTING.md) 和 [`SECURITY.md`](../SECURITY.md)。
+发布变更见 [`CHANGELOG.md`](../CHANGELOG.md)，贡献与安全边界见 [`CONTRIBUTING.md`](../CONTRIBUTING.md) 和 [`SECURITY.md`](../SECURITY.md)。完整 README/Markdown 审核登记见 [`MARKDOWN_INVENTORY.md`](MARKDOWN_INVENTORY.md)。
 
 如果要添加样例数据，请使用人工构造或明确获得授权的数据，并在文件头说明来源、许可、脱敏方法和删除方式。
 
