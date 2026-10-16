@@ -1,7 +1,6 @@
 """Fieldwork endpoints — real-time ASR, file transcription, hints, session management."""
 
 import json
-import os
 import re
 import time
 import uuid
@@ -27,6 +26,13 @@ from app.services.fieldnote_service import generate_field_notes, list_notes, upd
 from app.services.asr import XunfeiASR
 from app.services.asr_qwen import QwenRealtimeASR, qwen_filetrans
 from app.services.url_safety import build_public_upload_url
+from app.services.upload_validation import (
+    SUPPORTED_UPLOAD_EXTENSIONS,
+    UploadContentError,
+    UploadEmptyError,
+    UploadTooLargeError,
+    save_upload_stream,
+)
 from app.skills.mode_prompts import get_interview_scenarios
 
 import logging
@@ -451,29 +457,41 @@ async def transcribe_uploaded_file(
 ):
     """Upload an audio/video file for transcription via Qwen3-ASR-Filetrans.
 
-    Accepts: WAV, MP3, M4A, OGG, FLAC, MP4, MOV, MKV (max 500MB).
+    Accepts the configured media formats up to ``MAX_UPLOAD_MB``.
     Auto-submits to Qwen FileTrans if API key is configured and file URL is accessible.
     """
-    upload_dir = ensure_upload_dir()
-
-    allowed = {".wav", ".mp3", ".m4a", ".ogg", ".flac", ".mp4", ".mov", ".mkv",
-               ".aac", ".opus", ".webm"}
+    upload_dir = Path(ensure_upload_dir())
     suffix = Path(file.filename or "audio.wav").suffix.lower()
-    if suffix not in allowed:
-        return {"error": f"Unsupported format '{suffix}'. Supported: {', '.join(sorted(allowed))}"}
+    if suffix not in SUPPORTED_UPLOAD_EXTENSIONS:
+        return {
+            "error": (
+                f"Unsupported format '{suffix}'. Supported: "
+                f"{', '.join(sorted(SUPPORTED_UPLOAD_EXTENSIONS))}"
+            )
+        }
 
     file_id = uuid.uuid4().hex[:12]
     safe_name = f"{file_id}{suffix}"
-    filepath = os.path.join(upload_dir, safe_name)
+    filepath = upload_dir / safe_name
+    max_upload_bytes = settings.max_upload_mb * 1024 * 1024
+    try:
+        file_size_bytes = await save_upload_stream(
+            file, filepath, suffix, max_upload_bytes
+        )
+    except UploadTooLargeError as exc:
+        size_mb = exc.size_bytes / (1024 * 1024)
+        return {
+            "error": (
+                f"File too large ({size_mb:.1f}MB). "
+                f"Maximum: {settings.max_upload_mb}MB"
+            )
+        }
+    except UploadEmptyError:
+        return {"error": "Uploaded file is empty"}
+    except UploadContentError:
+        return {"error": "Uploaded content does not match its file extension"}
 
-    content = await file.read()
-    file_size_mb = len(content) / (1024 * 1024)
-
-    if file_size_mb > 500:
-        return {"error": f"File too large ({file_size_mb:.1f}MB). Maximum: 500MB"}
-
-    with open(filepath, "wb") as f:
-        f.write(content)
+    file_size_mb = file_size_bytes / (1024 * 1024)
 
     api_ready = bool(qwen_filetrans.api_key)
     public_url_ready = False
@@ -519,7 +537,7 @@ async def transcribe_uploaded_file(
             # ── Fallback: WebSocket-based Paraformer transcription ──
             try:
                 ws_asr = QwenRealtimeASR()
-                transcript = await ws_asr.transcribe_file(filepath)
+                transcript = await ws_asr.transcribe_file(str(filepath))
                 if transcript.strip():
                     result["status"] = "completed"
                     result["transcript"] = transcript
@@ -618,22 +636,29 @@ async def speech_engine_status():
 
 @router.post('/fieldwork/transcribe-enhanced')
 async def transcribe_enhanced(file: UploadFile = File(...), language: str = Form('zh'), with_emotion: bool = Form(True)):
-    upload_dir = ensure_upload_dir()
-    allowed = {'.wav','.mp3','.m4a','.ogg','.flac','.mp4','.mov','.mkv','.aac','.opus','.webm'}
+    upload_dir = Path(ensure_upload_dir())
     suffix = Path(file.filename or 'audio.wav').suffix.lower()
-    if suffix not in allowed:
+    if suffix not in SUPPORTED_UPLOAD_EXTENSIONS:
         return {'error': f'Unsupported format: {suffix}'}
     file_id = uuid.uuid4().hex[:12]
     safe_name = f'{file_id}{suffix}'
-    filepath = os.path.join(upload_dir, safe_name)
-    data = await file.read()
-    size_mb = len(data) / (1024 * 1024)
-    if size_mb > 500:
-        return {'error': f'Too large ({size_mb:.1f}MB). Max 500MB'}
-    with open(filepath, 'wb') as f:
-        f.write(data)
+    filepath = upload_dir / safe_name
+    max_upload_bytes = settings.max_upload_mb * 1024 * 1024
     try:
-        result = await speech_engine.process_file(filepath, language=language, with_emotion=with_emotion, with_speaker=True)
+        file_size_bytes = await save_upload_stream(
+            file, filepath, suffix, max_upload_bytes
+        )
+    except UploadTooLargeError as exc:
+        size_mb = exc.size_bytes / (1024 * 1024)
+        return {
+            'error': f'Too large ({size_mb:.1f}MB). Max {settings.max_upload_mb}MB'
+        }
+    except UploadEmptyError:
+        return {'error': 'Uploaded file is empty'}
+    except UploadContentError:
+        return {'error': 'Uploaded content does not match its file extension'}
+    try:
+        result = await speech_engine.process_file(str(filepath), language=language, with_emotion=with_emotion, with_speaker=True)
         return {
             'status': 'completed', 'file_id': file_id, 'filename': file.filename,
             'duration_s': result.duration_ms / 1000, 'engine_used': result.engine_used,

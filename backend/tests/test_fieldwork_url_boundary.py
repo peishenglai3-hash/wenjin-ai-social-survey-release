@@ -8,6 +8,21 @@ from app.api.v1 import router_fieldwork
 from app.config import settings
 
 
+class NamedUpload:
+    def __init__(self, filename: str, data: bytes):
+        self.filename = filename
+        self._data = data
+        self._offset = 0
+
+    async def read(self, size: int = -1) -> bytes:
+        if self._offset >= len(self._data):
+            return b""
+        end = len(self._data) if size < 0 else self._offset + size
+        chunk = self._data[self._offset:end]
+        self._offset = end
+        return chunk
+
+
 @pytest.mark.asyncio
 async def test_process_ignores_client_file_url_and_fails_closed(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
@@ -55,3 +70,34 @@ async def test_process_builds_provider_url_from_server_owned_file(tmp_path, monk
         "zh",
     )
     poll.assert_awaited_once_with("task-1")
+
+
+@pytest.mark.asyncio
+async def test_upload_route_streams_and_validates_media(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "max_upload_mb", 1)
+    monkeypatch.setattr(router_fieldwork.qwen_filetrans, "api_key", "")
+    audio = b"RIFF" + b"\x00\x00\x00\x00" + b"WAVE" + b"x" * 100
+
+    result = await router_fieldwork.transcribe_uploaded_file(
+        file=NamedUpload("interview.wav", audio),
+        db=None,
+    )
+
+    assert result["status"] == "saved"
+    assert result["api_key_ready"] is False
+    assert len(list(tmp_path.glob("*.wav"))) == 1
+
+
+@pytest.mark.asyncio
+async def test_upload_route_rejects_content_extension_mismatch(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "max_upload_mb", 1)
+
+    result = await router_fieldwork.transcribe_uploaded_file(
+        file=NamedUpload("interview.wav", b"not-a-wave"),
+        db=None,
+    )
+
+    assert result == {"error": "Uploaded content does not match its file extension"}
+    assert list(tmp_path.iterdir()) == []
