@@ -76,7 +76,7 @@
 | 全前端 lint | not passed | 97 errors、16 warnings；主要是历史 `any`、effect 规则和 Fast Refresh 规则，不能假装为绿色 |
 | npm 依赖审计 | passed | `npm audit --offline --audit-level=high`：0 vulnerabilities |
 | 前端窄屏审计 | passed with boundary | 320px/768px 视口截图通过；后端未联机，API 404 不能当作集成通过 |
-| 当前树凭据扫描 | passed | 当前树及可达 49 个提交的高置信度模式未命中；不替代历史扫描和供应商侧轮换 |
+| 当前树凭据扫描 | passed | 当前树及候选分支可达提交的高置信度模式未命中；不替代历史扫描和供应商侧轮换 |
 | Markdown 链接 | passed | 公开文档 inventory 覆盖 30 个 Markdown/README 文件，当前相对链接无缺失目标 |
 | Docker/Compose | not run | 当前验证环境未安装 Docker |
 | Playwright 浏览器 smoke | not run | npm 包存在，但本机未安装 Chromium executable |
