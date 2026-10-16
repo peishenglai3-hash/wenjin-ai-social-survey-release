@@ -20,7 +20,9 @@ knowledge-package/
 - `cards_file` 是包内相对路径，条目未撤销；
 - `content_sha256` 与文件实际哈希一致。
 
-验证器只读取 manifest 登记的文件，不会 glob 目录中的其它 JSON。没有配置 `KNOWLEDGE_DIR` 时，启动仍可运行，但知识卡片导入返回 `manifest_required`；manifest 无法通过时返回 `manifest_invalid`，并保留安全的通用 cluster/trigger 初始化。
+验证器只读取 manifest 登记的文件，不会 glob 目录中的其它 JSON。每个 card 还会经过 bounded shape 校验：列表数量、文本长度、`confidence`（1-5）、`source_file` 相对路径、`language`（`zh|en|bilingual`）、`field_context`、`method_tags` 和 `material_type` 必须符合约束；未知字段、明显的 prompt 注入指令、凭据标记和私钥标记会被拒绝。单个卡片文件上限为 5 MiB、5,000 张卡片。没有配置 `KNOWLEDGE_DIR` 时，启动仍可运行，但知识卡片导入返回 `manifest_required`；manifest 或卡片无法通过时返回 `manifest_invalid`，并保留安全的通用 cluster/trigger 初始化。
+
+卡片支持 `reference_card`、`training_example` 和 `prompt_fragment` 三种材料类型。`training_example` 与 `prompt_fragment` 仍然只是部署者已批准包中的受控输入，不代表模型训练授权，也不绕过人工事实/版权/隐私/提示注入审核。建议每个条目明确语言、调查场域和方法标签；运行时不会恢复原书全文、OCR、日志或受访者原始材料。
 
 ## 审计顺序
 

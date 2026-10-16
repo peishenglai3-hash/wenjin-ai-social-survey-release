@@ -5,13 +5,13 @@ Optionally reads deployment-owned JSON knowledge cards and inserts them into SQL
 The public repository ships no corpus; operators must supply authorized data.
 Seeds M.3 design clusters (P0-2/P0-3/P0-4). Idempotent for the built-in clusters.
 """
-import json, logging
+import logging
 from pathlib import Path
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.knowledge_card import ReferenceCard, SkillsCluster, TriggerKeyword
-from app.services.knowledge_manifest import KnowledgeManifestError, iter_approved_items
+from app.services.knowledge_manifest import KnowledgeManifestError, iter_approved_items, load_approved_cards
 
 logger = logging.getLogger(__name__)
 CLUSTERS = [
@@ -134,12 +134,13 @@ async def ingest_all(db: AsyncSession) -> dict:
         )
         if already_loaded:
             continue
-        data = json.loads(cards_path.read_text(encoding="utf-8"))
-        if data.get("source") and data["source"] != item.source_slug:
-            logger.warning("Skipping source mismatch for %s", item.source_slug)
+        try:
+            cards = load_approved_cards(cards_path, source_slug=item.source_slug)
+        except KnowledgeManifestError:
+            logger.warning("Knowledge card validation failed after manifest verification for %s", item.source_slug)
             continue
         clusters = _assign_clusters(item.source_slug)
-        for card in data.get("cards", []):
+        for card in cards:
             db.add(ReferenceCard(
                 source_slug=item.source_slug,
                 source_file=card.get("source_file", ""),
@@ -153,6 +154,10 @@ async def ingest_all(db: AsyncSession) -> dict:
                 applicable_scenarios=card.get("applicable_scenarios", []),
                 confidence=card.get("confidence", 3),
                 extracted_at=card.get("extracted_at", ""),
+                language=card.get("language", "bilingual"),
+                field_context=card.get("field_context", []),
+                method_tags=card.get("method_tags", []),
+                material_type=card.get("material_type", "reference_card"),
                 clusters=clusters,
                 search_text=_build_search_text(card),
             ))
