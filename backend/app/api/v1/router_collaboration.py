@@ -2,12 +2,13 @@
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.api.deps_auth import get_current_profile
+from app.api.pagination import take_page
 from app.models.collaboration import ProjectAuditEvent, ProjectInvitation, ProjectMember
 from app.models.survey import SurveyProject, UserProfile
 from app.schemas.collaboration import InvitationCreate, MemberRoleUpdate
@@ -46,6 +47,8 @@ def _invitation_payload(invitation: ProjectInvitation) -> dict:
 @router.get("/projects/{project_id}/members")
 async def list_members(
     project_id: int,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
     profile: UserProfile = Depends(get_current_profile),
 ):
@@ -56,8 +59,15 @@ async def list_members(
         select(ProjectMember)
         .where(ProjectMember.project_id == project_id, ProjectMember.status == "active")
         .order_by(ProjectMember.id)
+        .offset(offset)
+        .limit(limit + 1)
     )
-    return {"project_id": project_id, "members": [_member_payload(item) for item in result.scalars().all()]}
+    members, pagination = take_page(result.scalars().all(), limit=limit, offset=offset)
+    return {
+        "project_id": project_id,
+        "members": [_member_payload(item) for item in members],
+        "pagination": pagination,
+    }
 
 
 @router.post("/projects/{project_id}/invitations")
@@ -122,6 +132,8 @@ async def create_invitation(
 
 @router.get("/invitations")
 async def list_my_invitations(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
     profile: UserProfile = Depends(get_current_profile),
 ):
@@ -132,8 +144,11 @@ async def list_my_invitations(
             ProjectInvitation.status == "pending",
         )
         .order_by(ProjectInvitation.created_at.desc())
+        .offset(offset)
+        .limit(limit + 1)
     )
-    return {"invitations": [_invitation_payload(item) for item in result.scalars().all()]}
+    invitations, pagination = take_page(result.scalars().all(), limit=limit, offset=offset)
+    return {"invitations": [_invitation_payload(item) for item in invitations], "pagination": pagination}
 
 
 @router.post("/invitations/{invitation_id}/accept")
@@ -289,6 +304,8 @@ async def remove_member(
 @router.get("/projects/{project_id}/audit")
 async def list_audit_events(
     project_id: int,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
     profile: UserProfile = Depends(get_current_profile),
 ):
@@ -297,8 +314,10 @@ async def list_audit_events(
         select(ProjectAuditEvent)
         .where(ProjectAuditEvent.project_id == project_id)
         .order_by(ProjectAuditEvent.created_at.desc())
-        .limit(100)
+        .offset(offset)
+        .limit(limit + 1)
     )
+    events, pagination = take_page(result.scalars().all(), limit=limit, offset=offset)
     return {
         "events": [
             {
@@ -311,7 +330,8 @@ async def list_audit_events(
                 "request_id": event.request_id,
                 "created_at": str(event.created_at) if event.created_at else None,
             }
-            for event in result.scalars().all()
-        ]
+            for event in events
+        ],
+        "pagination": pagination,
     }
 

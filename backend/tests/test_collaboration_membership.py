@@ -74,6 +74,17 @@ async def test_owner_can_invite_accept_and_manage_role(client, db_session):
     assert members.status_code == 200
     member = next(item for item in members.json()["members"] if item["profile_id"] == second_profile.id)
 
+    member_page = await client.get(
+        f"/api/v1/collaboration/projects/{project_id}/members?limit=1"
+    )
+    assert member_page.status_code == 200
+    assert member_page.json()["pagination"] == {
+        "limit": 1,
+        "offset": 0,
+        "has_more": True,
+        "next_offset": 1,
+    }
+
     updated = await client.patch(
         f"/api/v1/collaboration/projects/{project_id}/members/{member['id']}",
         json={"role": "editor"},
@@ -85,6 +96,12 @@ async def test_owner_can_invite_accept_and_manage_role(client, db_session):
     assert audit.status_code == 200
     event_types = {event["event_type"] for event in audit.json()["events"]}
     assert {"invitation.created", "invitation.accepted", "member.role_updated"} <= event_types
+
+    audit_page = await client.get(
+        f"/api/v1/collaboration/projects/{project_id}/audit?limit=1"
+    )
+    assert audit_page.status_code == 200
+    assert audit_page.json()["pagination"]["has_more"] is True
 
 
 @pytest.mark.asyncio

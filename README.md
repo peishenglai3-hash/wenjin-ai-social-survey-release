@@ -99,7 +99,7 @@ npm test
 - [x] 首版 provider adapter / BYOK contract、fake provider 和能力发现
 - [x] 研究项目成员、角色、邀请和元数据审计模型
 - [x] WISE 候选提案、人工审批、撤销和记忆写入门
-- [x] 研究产物版本、批注、审核任务和可撤销脱敏分享（删除/保留策略与分页仍待完成）
+- [x] 研究产物版本、批注、审核任务、分页和可撤销脱敏分享（删除/保留策略仍待完成）
 - [x] provider 配额、有限重试和运营审计；webhook、最小 SDK 和第三方扩展隔离仍待设计
 - [ ] 版本化 REST/OpenAPI、配额与 webhook
 - [ ] 可审计的第三方扩展机制和 typed SDK

@@ -1,11 +1,12 @@
 """Collaborative research artifact API without realtime editing or raw-source sharing."""
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.api.deps_auth import get_current_profile
+from app.api.pagination import take_page
 from app.models.research_artifact import (
     ResearchArtifact,
     ResearchArtifactVersion,
@@ -54,6 +55,8 @@ async def create_artifact(
 @router.get("/projects/{project_id}/artifacts")
 async def list_artifacts(
     project_id: int,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
     profile: UserProfile = Depends(get_current_profile),
 ):
@@ -62,9 +65,11 @@ async def list_artifacts(
         select(ResearchArtifact)
         .where(ResearchArtifact.project_id == project_id, ResearchArtifact.status == "active")
         .order_by(ResearchArtifact.created_at.desc())
-        .limit(100)
+        .offset(offset)
+        .limit(limit + 1)
     )
-    return {"artifacts": [_artifact_payload(item) for item in result.scalars().all()]}
+    artifacts, pagination = take_page(result.scalars().all(), limit=limit, offset=offset)
+    return {"artifacts": [_artifact_payload(item) for item in artifacts], "pagination": pagination}
 
 
 @router.get("/artifacts/{artifact_id}")
@@ -92,12 +97,24 @@ async def create_version(
 @router.get("/artifacts/{artifact_id}/versions")
 async def list_versions(
     artifact_id: int,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
     profile: UserProfile = Depends(get_current_profile),
 ):
     artifact = await ResearchArtifactService.get_artifact(db, artifact_id, profile)
-    versions = await ResearchArtifactService.list_versions(db, artifact)
-    return {"versions": [_version_payload(item) for item in versions]}
+    versions, has_more = await ResearchArtifactService.list_versions(
+        db, artifact, limit=limit, offset=offset
+    )
+    return {
+        "versions": [_version_payload(item) for item in versions],
+        "pagination": {
+            "limit": limit,
+            "offset": offset,
+            "has_more": has_more,
+            "next_offset": offset + limit if has_more else None,
+        },
+    }
 
 
 @router.get("/versions/{version_id}")
@@ -125,12 +142,24 @@ async def create_annotation(
 @router.get("/versions/{version_id}/annotations")
 async def list_annotations(
     version_id: int,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
     profile: UserProfile = Depends(get_current_profile),
 ):
     version = await ResearchArtifactService.get_version(db, version_id, profile)
-    annotations = await ResearchArtifactService.list_annotations(db, version)
-    return {"annotations": [_annotation_payload(item) for item in annotations]}
+    annotations, has_more = await ResearchArtifactService.list_annotations(
+        db, version, limit=limit, offset=offset
+    )
+    return {
+        "annotations": [_annotation_payload(item) for item in annotations],
+        "pagination": {
+            "limit": limit,
+            "offset": offset,
+            "has_more": has_more,
+            "next_offset": offset + limit if has_more else None,
+        },
+    }
 
 
 @router.post("/versions/{version_id}/review-tasks", status_code=status.HTTP_201_CREATED)
@@ -148,6 +177,8 @@ async def create_review_task(
 @router.get("/versions/{version_id}/review-tasks")
 async def list_review_tasks(
     version_id: int,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
     profile: UserProfile = Depends(get_current_profile),
 ):
@@ -156,8 +187,11 @@ async def list_review_tasks(
         select(ResearchReviewTask)
         .where(ResearchReviewTask.version_id == version.id)
         .order_by(ResearchReviewTask.created_at.desc())
+        .offset(offset)
+        .limit(limit + 1)
     )
-    return {"review_tasks": [_review_payload(item) for item in result.scalars().all()]}
+    tasks, pagination = take_page(result.scalars().all(), limit=limit, offset=offset)
+    return {"review_tasks": [_review_payload(item) for item in tasks], "pagination": pagination}
 
 
 @router.post("/review-tasks/{task_id}/decision")

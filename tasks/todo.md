@@ -37,7 +37,7 @@
 - [ ] W3 WISE/fake provider/提示注入/失败重试测试。
 - [x] C1 协作项目、成员、角色、邀请和归属模型（双用户拒绝测试已覆盖）。
 - [x] C2 版本、批注、审核任务、审计事件和可撤销脱敏分享（删除/保留策略与分页待补）。
-- [ ] C3 后端协作 API、权限矩阵、分页、幂等和错误契约（成员/邀请/角色/审计首轮 API 已完成，分页、统一 envelope 和竞态幂等仍待完成）。
+- [ ] C3 后端协作 API、权限矩阵、分页、幂等和错误契约（成员/邀请/角色/审计/研究产物列表已支持 bounded offset pagination；统一 envelope、删除保留策略和竞态幂等仍待完成）。
 - [ ] C4 前端协作最小闭环和安全默认 feature flag。
 - [ ] C5 接口与浏览器 smoke，不实现实时共同编辑。
 - [x] A1 provider contract、fake provider、capability manifest 和契约测试（无网络 fake 与错误边界已覆盖）。

@@ -111,6 +111,21 @@ async def test_artifact_version_idempotency_reuses_existing_version(client, db_s
     ).scalars().all()
     assert len(versions) == 1
 
+    second = await client.post(
+        f"/api/v1/collaboration/artifacts/{artifact_id}/versions",
+        json={
+            "redacted_content": "第二个脱敏版本。",
+            "redaction_note": "继续去除直接身份信息。",
+            "idempotency_key": "artifact-version-2",
+        },
+    )
+    assert second.status_code == 201
+    page = await client.get(
+        f"/api/v1/collaboration/artifacts/{artifact_id}/versions?limit=1"
+    )
+    assert page.status_code == 200
+    assert page.json()["pagination"]["has_more"] is True
+
 
 async def test_artifact_rejects_obvious_direct_identifiers(client):
     project_id = await _create_project(client)

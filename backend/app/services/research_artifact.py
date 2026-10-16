@@ -206,13 +206,22 @@ class ResearchArtifactService:
         return version, True
 
     @staticmethod
-    async def list_versions(db: AsyncSession, artifact: ResearchArtifact) -> list[ResearchArtifactVersion]:
+    async def list_versions(
+        db: AsyncSession,
+        artifact: ResearchArtifact,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[ResearchArtifactVersion], bool]:
         result = await db.execute(
             select(ResearchArtifactVersion)
             .where(ResearchArtifactVersion.artifact_id == artifact.id)
             .order_by(ResearchArtifactVersion.version_number.desc())
+            .offset(offset)
+            .limit(limit + 1)
         )
-        return list(result.scalars().all())
+        rows = list(result.scalars().all())
+        return rows[:limit], len(rows) > limit
 
     @staticmethod
     async def get_version(db: AsyncSession, version_id: int, profile: UserProfile) -> ResearchArtifactVersion:
@@ -259,13 +268,22 @@ class ResearchArtifactService:
         return annotation
 
     @staticmethod
-    async def list_annotations(db: AsyncSession, version: ResearchArtifactVersion) -> list[ResearchAnnotation]:
+    async def list_annotations(
+        db: AsyncSession,
+        version: ResearchArtifactVersion,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[ResearchAnnotation], bool]:
         result = await db.execute(
             select(ResearchAnnotation)
             .where(ResearchAnnotation.version_id == version.id)
             .order_by(ResearchAnnotation.created_at)
+            .offset(offset)
+            .limit(limit + 1)
         )
-        return list(result.scalars().all())
+        rows = list(result.scalars().all())
+        return rows[:limit], len(rows) > limit
 
     @staticmethod
     async def create_review_task(
