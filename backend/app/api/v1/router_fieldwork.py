@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import time
 import uuid
 from pathlib import Path
@@ -25,12 +26,27 @@ from app.services.volcano_emotion import volcano_emotion
 from app.services.fieldnote_service import generate_field_notes, list_notes, update_note, delete_note, export_notes
 from app.services.asr import XunfeiASR
 from app.services.asr_qwen import QwenRealtimeASR, qwen_filetrans
+from app.services.url_safety import build_public_upload_url
 from app.skills.mode_prompts import get_interview_scenarios
 
 import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["fieldwork"])
+_UPLOAD_FILE_ID_PATTERN = re.compile(r"^[0-9a-f]{12}$")
+
+
+def _find_uploaded_file(file_id: str) -> Path | None:
+    """Resolve only server-generated upload IDs within the upload directory."""
+
+    if not _UPLOAD_FILE_ID_PATTERN.fullmatch(file_id):
+        return None
+    root = Path(ensure_upload_dir()).resolve()
+    for candidate in root.glob(f"{file_id}.*"):
+        resolved = candidate.resolve()
+        if resolved.is_file() and resolved.parent == root:
+            return resolved
+    return None
 
 # ── Theme-specific prompt modifiers ────────────────────────────────
 
@@ -460,6 +476,14 @@ async def transcribe_uploaded_file(
         f.write(content)
 
     api_ready = bool(qwen_filetrans.api_key)
+    public_url_ready = False
+    file_url = ""
+    if api_ready:
+        try:
+            file_url = build_public_upload_url(settings.public_base_url, safe_name)
+            public_url_ready = True
+        except ValueError:
+            logger.warning("Skipping FileTrans: PUBLIC_BASE_URL is not a safe HTTPS URL")
 
     result = {
         "status": "saved",
@@ -471,8 +495,7 @@ async def transcribe_uploaded_file(
     }
 
     # Auto-submit to Qwen FileTrans if API key is configured
-    if api_ready:
-        file_url = f"{settings.public_base_url.rstrip('/')}/uploads/{safe_name}"
+    if api_ready and public_url_ready:
         logger.info("FileTrans attempt for uploaded file %s", file_id)
         try:
             task_id = await qwen_filetrans.submit(file_url, language)
@@ -507,8 +530,10 @@ async def transcribe_uploaded_file(
             except Exception as ws_e:
                 result["status"] = "submit_failed"
                 result["message"] = "Saved, but transcription submission failed."
-    else:
+    elif not api_ready:
         result["message"] = "File saved. QWEN_API_KEY not configured — set it to enable transcription."
+    else:
+        result["message"] = "File saved. Configure a public HTTPS PUBLIC_BASE_URL to enable provider transcription."
 
     return result
 
@@ -517,16 +542,17 @@ async def transcribe_uploaded_file(
 async def process_transcription(file_id: str, payload: dict):
     """Submit a previously uploaded file for Qwen Filetrans processing.
 
-    Body: {"file_url": "https://your-server/uploads/audio.mp3"} — publicly accessible URL.
+    The provider URL is always derived from a server-owned upload ID and
+    deployment-owned PUBLIC_BASE_URL. Client-provided file URLs are ignored.
     """
-    file_url = payload.get("file_url", "")
-    if not file_url:
-        upload_dir = ensure_upload_dir()
-        matching = [f for f in os.listdir(upload_dir) if f.startswith(file_id)]
-        if matching:
-            file_url = f"{settings.public_base_url.rstrip('/')}/uploads/{matching[0]}"
-        else:
-            return {"error": "file_url required — provide a publicly accessible URL"}
+    uploaded_file = _find_uploaded_file(file_id)
+    if uploaded_file is None:
+        return {"error": "Uploaded file not found"}
+
+    try:
+        file_url = build_public_upload_url(settings.public_base_url, uploaded_file.name)
+    except ValueError:
+        return {"error": "A safe HTTPS PUBLIC_BASE_URL is required before provider submission"}
 
     language = payload.get("language", "zh")
 
