@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.middleware.request_context import get_request_id
 from app.models.collaboration import ProjectAuditEvent, ProjectMember
 from app.models.survey import SurveyProject
 
@@ -84,6 +85,7 @@ def add_audit_event(
         target_type=target_type,
         target_id=target_id,
         details_json=json.dumps(details or {}, ensure_ascii=False, sort_keys=True),
+        request_id=get_request_id(),
     )
     db.add(event)
     return event

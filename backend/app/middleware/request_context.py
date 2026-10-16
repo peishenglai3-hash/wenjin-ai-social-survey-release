@@ -1,6 +1,7 @@
 """Request correlation context for safe diagnostics and client support."""
 
 from contextvars import ContextVar
+import logging
 import re
 from uuid import uuid4
 
@@ -14,6 +15,11 @@ request_id_context: ContextVar[str | None] = ContextVar(
     "wenjin_request_id",
     default=None,
 )
+
+
+def get_request_id() -> str | None:
+    """Return the current safe correlation id for logs and audit metadata."""
+    return request_id_context.get()
 
 
 def normalize_request_id(value: str | None) -> str:
@@ -40,6 +46,21 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         try:
             response = await call_next(request)
             response.headers[REQUEST_ID_HEADER] = request_id
+            logging.getLogger(__name__).info(
+                "request_completed request_id=%s method=%s path=%s status=%s",
+                request_id,
+                request.method,
+                request.url.path,
+                response.status_code,
+            )
             return response
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "request_failed request_id=%s method=%s path=%s",
+                request_id,
+                request.method,
+                request.url.path,
+            )
+            raise
         finally:
             request_id_context.reset(context_token)

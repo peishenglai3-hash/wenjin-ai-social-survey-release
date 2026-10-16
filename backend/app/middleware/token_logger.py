@@ -10,6 +10,8 @@ import os
 import time
 from pathlib import Path
 
+from app.middleware.request_context import get_request_id
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_TOKEN_LOG_PATH = Path(__file__).resolve().parents[2] / "logs" / "token_usage.jsonl"
@@ -43,6 +45,7 @@ def log_token_usage(
         Path(TOKEN_LOG_PATH).parent.mkdir(parents=True, exist_ok=True)
         record = {
             "ts": time.time(),
+            "request_id": get_request_id(),
             "model": model,
             "task": task,
             "skill": skill_name,

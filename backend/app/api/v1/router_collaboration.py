@@ -308,6 +308,7 @@ async def list_audit_events(
                 "target_type": event.target_type,
                 "target_id": event.target_id,
                 "details": event.details_json,
+                "request_id": event.request_id,
                 "created_at": str(event.created_at) if event.created_at else None,
             }
             for event in result.scalars().all()

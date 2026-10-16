@@ -75,4 +75,5 @@ class ProjectAuditEvent(Base, TimestampMixin):
     target_type: Mapped[str] = mapped_column(String(50), default="project")
     target_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     details_json: Mapped[str] = mapped_column(Text, default="{}")
+    request_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
 

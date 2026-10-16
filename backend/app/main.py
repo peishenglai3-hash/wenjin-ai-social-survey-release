@@ -1,5 +1,6 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 # ── Structured logging to console + file ──────────────────────────
@@ -56,6 +57,62 @@ app.add_middleware(
 
 # Correlate requests without trusting arbitrary client header values.
 app.add_middleware(RequestContextMiddleware)
+
+
+def _request_id(request: Request) -> str | None:
+    return getattr(request.state, "request_id", None)
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Return a small compatible error envelope without echoing arbitrary input."""
+    message = exc.detail if isinstance(exc.detail, str) else "Request failed"
+    return JSONResponse(
+        status_code=exc.status_code,
+        headers=exc.headers,
+        content={
+            "error": message,
+            "detail": message,
+            "request_id": _request_id(request),
+        },
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Avoid FastAPI's default body echo, which may repeat a supplied secret."""
+    issues = [
+        {
+            "loc": list(error.get("loc", ())),
+            "msg": error.get("msg", "Invalid value"),
+            "type": error.get("type", "value_error"),
+        }
+        for error in exc.errors()
+    ]
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "Request validation failed",
+            "detail": issues,
+            "request_id": _request_id(request),
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Keep stack traces in server logs, never in public responses."""
+    del exc
+    logging.getLogger(__name__).exception(
+        "unhandled_request_exception request_id=%s", _request_id(request), exc_info=True
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal server error",
+            "request_id": _request_id(request),
+        },
+    )
 
 
 # ── Request size guard ──────────────────────────────────────────────
