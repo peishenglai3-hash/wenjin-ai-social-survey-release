@@ -1,6 +1,6 @@
 # Markdown 与 README 审核登记
 
-审核日期：2026-10-16。范围是公开 Git 树中全部 Markdown、README 和 `backend/alembic/README`。本登记确认文档已按“专业知识 / 调查赋能 / 隐私安全 / 可复现边界”复核；它不是版权或伦理批准。
+审核日期：2026-10-16。范围是公开 Git 树中全部 30 个 Markdown、README 和 `backend/alembic/README` 文件。本登记确认文档已按“专业知识 / 调查赋能 / 隐私安全 / 可复现边界”复核；它不是版权或伦理批准。
 
 | 文件 | 责任主题 | 审核结论 |
 | --- | --- | --- |
@@ -15,6 +15,7 @@
 | `tasks/plan.md` | 分阶段实施计划 | 已脱敏；不暴露本机路径，保留停止条件和回滚规则 |
 | `tasks/todo.md` | 逐项实施状态 | 已更新；保留 Docker、lint、版权和人工知识批准等未完成闸门 |
 | `docs/README.md` | 文档索引和公开知识边界 | 已更新；链接 prompt/skill 与候选材料登记 |
+| `docs/MARKDOWN_INVENTORY.md` | 本次文档审核证据 | 新增；登记公开文档范围、边界与机械检查 |
 | `docs/BASELINE-2026-10-16.md` | 历史基线证据 | 保留为冻结基线；不等同于发布批准 |
 | `docs/OPEN_SOURCE_EVOLUTION_CAPABILITY_MAP.md` | 能力地图 | 保留；明确能力地图不等于已发布 |
 | `docs/OPEN_API.md` | Open API V1、BYOK 和客户端边界 | 已更新；明确部署者配置自己的 key，客户端不接收 provider key |
@@ -24,6 +25,7 @@
 | `docs/KNOWLEDGE_INGESTION.md` | 私有知识包 manifest 和准入 | 已更新；加入逐卡 bounded shape、语言/场域/方法和注入标记闸门 |
 | `docs/KNOWLEDGE_CANDIDATE_REGISTER.md` | 中英文候选材料元数据 | 新增；全部 `needs_review`，不含全文或私人材料 |
 | `docs/PROMPT_SKILL_REVIEW.md` | prompt/skill 专业与调查赋能校准 | 新增；统一证据、隐私、场域和 AI 建议性守则 |
+| `docs/RELEASE-CANDIDATE-2026-10-16.md` | 发布候选证据、限制和回滚 | 新增；明确未推送、未完成门禁和人工审阅要求 |
 | `docs/adr/README.md` | ADR 目录规则 | 保留；要求记录决策、证据、风险和回滚 |
 | `docs/adr/0001-server-side-byok.md` | 服务端 BYOK | 保留；key 不进客户端 |
 | `docs/adr/0002-collaboration-v1-no-realtime-editing.md` | 协作 V1 非实时 | 保留；不引入共同编辑冲突复杂度 |

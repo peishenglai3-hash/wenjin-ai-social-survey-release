@@ -1,0 +1,92 @@
+# Wenjin 发布候选报告（2026-10-16）
+
+状态：`release candidate`，不是公开发布批准。
+
+当前分支：`codex/wenjin-evolution-v2`  
+候选报告基线提交：`3f2ccaa`（本报告作为后续文档提交加入候选分支）  
+公开仓库 `main`：未修改、未推送。原 `ai-social-survey` master 基线：`c759f6f415a55c3f66efde17627b57c5415b1791`。
+
+## 1. 结论摘要
+
+当前候选已经完成一轮可运行的安全、知识准入、WISE、协作研究和 Open API 演进，稳定核心代码路径没有因新架构被删除。与原 master 的代码文件结构对照显示：原有 `frontend/src` 文件全部保留，并新增协作 API/页面；原有 `backend/app` 中被移出的 7 个文件全部是历史知识卡片/manifest 数据，而不是业务代码；其余后端新增内容主要是权限、安全、迁移、协作、WISE 和 provider contract。
+
+因此可以给出：
+
+- 功能路径保留程度：高。认证、选题/问卷、田野工具、AI 助手、文献发现、知识/记忆、导出、社区和管理等现有路径仍在源码与回归测试中。
+- 实用性判断：具备继续部署和复用的候选基础；协作研究 V1 和 Open API V1 已有最小闭环。
+- 不能宣称：与原 master 在所有真实 provider、历史数据、PostgreSQL/Redis、Docker 和浏览器环境中已经完成严格等价验收；这些还需要 CI/部署环境和人工验收证据。
+
+## 2. 原 master 对照证据
+
+对照使用私有备份中的原 master ZIP 和当前 Git 跟踪树，只比较路径、类别和可执行代码边界，不把私有材料复制到公开树：
+
+| 范围 | 原 master | 当前候选 | 判断 |
+| --- | ---: | ---: | --- |
+| 总文件 | 386 | 320 | 减少部分主要是内部文档、部署脚本、日志、原始材料和知识数据 |
+| `backend/app` | 104 | 129 | 仅 7 个移出项为历史知识卡片数据；新增安全/协作/API/WISE 代码 |
+| `frontend/src` | 73 | 76 | 原有 73 个保留，新增协作 API、协作页面和离线队列测试相关内容 |
+| `backend/tests` | 11 | 41 | 新增归属、认证、上传、知识、协作、WISE、provider 和安全拒绝测试 |
+| `frontend/src/__tests__` | 3 | 4 | 保留原测试并新增离线队列覆盖 |
+
+原 master 中的书籍、PDF/OCR/切片、内部汇报、日志、部署脚本和知识卡片不进入公开树；它们继续作为私有备份，不能因为 Apache-2.0 代码许可证而获得再许可。
+
+## 3. 已完成切片
+
+### 平台与安全
+
+- request ID、通用错误边界、provider fail-closed、CORS/代理边界和多组对象归属校验。
+- refresh token 改为 HttpOnly Cookie + 服务端摘要，浏览器 access token 仅内存保存，响应不返回 refresh token 原文。
+- 上传大小/签名/归属/保留元数据、URL/SSRF 和实时 WebSocket bearer 子协议边界。
+- CI 已包含 `pip check`、compile、Alembic upgrade/check、diff whitespace 和高置信度凭据扫描。
+
+### 知识、prompt 与 WISE
+
+- 内置 skill 自动附加证据/推断区分、隐私最小化、知情同意、AI 建议性、场域/语言限制和失败条件。
+- 私有知识包只接受 `approved` manifest、哈希匹配、未撤销条目；逐卡校验未知字段、长度、相对路径、语言、场域、方法标签、材料类型和明显提示注入/凭据标记。
+- 中英文候选材料只公开元数据登记，全部保持 `needs_review`；独立审计报告仍在私有审计区，未进入 runtime。
+- WISE 候选记忆进入 pending，经过批准/撤销路径才能影响长期记忆。
+
+### 协作研究 V1
+
+- 项目成员、角色、邀请、审计事件、研究产物、版本、批注、审核任务、分页和一次性可撤销脱敏分享。
+- 前端最小协作工作台默认关闭；启用后只显示成员元数据和研究产物入口，不实现实时共同编辑，不上传原始访谈资料。
+
+### Open API V1
+
+- OpenAI-compatible、DashScope 和 local fake provider contract；provider key 只在部署者后端环境配置。
+- scope/项目归属、滚动配额、有限 retry、metadata-only usage records、OpenAPI snapshot、标准库示例和 prompt-only 扩展边界。
+
+## 4. 实测验证
+
+本机验证环境：Python 3.11.15、Node v24.15.0、npm 11.12.1；后端测试清除了代理环境变量和所有真实 provider key，使用仅测试 JWT secret。
+
+| 检查 | 结果 | 说明 |
+| --- | --- | --- |
+| 后端全量 | 264 passed | 49.49s，2 个既有 Pydantic deprecation warnings |
+| 知识准入专项 | 12 passed | 包含未知字段、越界、路径、注入标记、双语 metadata 和 runtime 只读 manifest |
+| 后端 compile | passed | `python -m compileall -q app` |
+| 依赖图 | passed | `pip check` 无 broken requirements |
+| SQLite migration | passed | 空库 `alembic upgrade head` + `alembic check`，含知识 metadata migration |
+| 前端类型/单测 | passed | `tsc -b`，Vitest 3 files / 14 tests |
+| 前端 build | passed with warning | Vite build 成功；最大压缩 vendor chunk 约 1.29 MB |
+| 新协作文件 lint | passed | 协作页面/API/config 定向 ESLint 通过 |
+| 全前端 lint | not passed | 104 errors、16 warnings；主要是历史 `any`、effect 规则和 Fast Refresh 规则，不能假装为绿色 |
+| npm 依赖审计 | passed | `npm audit --offline --audit-level=high`：0 vulnerabilities |
+| 当前树凭据扫描 | passed | CI 高置信度模式未命中；不替代历史扫描和供应商侧轮换 |
+| Markdown 链接 | passed | 公开文档 inventory 覆盖 30 个文件，当前相对链接无缺失目标 |
+| Docker/Compose | not run | 当前验证环境未安装 Docker |
+| Playwright 浏览器 smoke | not run | npm 包存在，但本机未安装 Chromium executable |
+
+## 5. 仍需项目创建者审阅的阻塞项
+
+1. 知识候选的版权/再分发权、翻译质量、场域适配和伦理边界仍需人工批准；在此之前不能生成 `approved` manifest，也不能把原训练书籍/切片恢复到公开树。
+2. 全前端 lint 尚未通过；应在独立质量切片中治理历史问题，不能通过关闭规则或删测试放行。
+3. PostgreSQL + Redis、Docker Compose、真实浏览器/PWA、生产 HTTPS/CORS/CSP 和上传保留清理还没有本机成功证据。
+4. 完整 dependency/license inventory、Git 历史 secret scan 和第三方材料权利清单仍需 CI/人工复核。
+5. 协作批量审核、删除/保留策略、统一错误 envelope，以及 Open API token lifecycle/webhook/公共 streaming/完整 typed SDK 仍不属于本候选的完成范围。
+
+## 6. 发布建议与回滚
+
+当前建议：保留候选分支和私有备份，先由项目创建者审阅本报告、知识审计报告和 `docs/MARKDOWN_INVENTORY.md`，完成剩余环境/版权/依赖闸门后，再单独确认是否将候选普通推送到公开仓库 `main`。本轮没有执行任何公开推送、强推、可见性变更或私有备份删除。
+
+回滚路径是回到候选前的已提交 commit；协作前端可通过 `VITE_COLLABORATION_V1_ENABLED=false` 保持关闭，知识 runtime 可不设置 `KNOWLEDGE_DIR`，Open API provider 可保持未配置或关闭。
