@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import api, { setAccessToken as setClientAccessToken } from "../api/client";
+import { clearOfflineQueue } from "../services/offlineQueue";
 
 interface UserProfile {
   id: number;
@@ -216,6 +217,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       role: "guest",
       is_active: true,
     };
+    void api.post("/auth/logout").catch(() => {});
+    clearOfflineQueue();
     setUser(guestUser);
     setAccessToken("guest");
     setClientAccessToken(null);
@@ -272,6 +275,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setClientAccessToken(null);
     setUser(null);
     localStorage.removeItem("wenjin_auth");
+    clearOfflineQueue();
   }, []);
 
   const refreshToken = useCallback(async (): Promise<boolean> => {

@@ -65,14 +65,9 @@ export default defineConfig({
         clientsClaim: true,
         runtimeCaching: [
           {
-            // Domain-agnostic: matches configured API hosts and localhost
+            // Never cache survey, transcript, auth, or provider responses.
             urlPattern: /\/api\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              networkTimeoutSeconds: 10,
-              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 },
-            },
+            handler: 'NetworkOnly',
           },
         ],
       },

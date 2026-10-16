@@ -18,7 +18,7 @@
 ## 平台硬化
 
 - [ ] P1 配置、启动失败、错误 envelope、request ID 和日志脱敏。
-- [ ] P2 认证、CORS、JWT/token 存储、对象归属、上传和 SSRF 边界（认证 Cookie/摘要与多组对象归属已完成第一轮，响应兼容字段、CORS 和全局上传生命周期仍待完成）。
+- [ ] P2 认证、CORS、JWT/token 存储、对象归属、上传和 SSRF 边界（认证 Cookie/摘要、离线队列隐私与多组对象归属已完成第一轮，响应兼容字段、CORS、真实 PWA 验收和全局上传生命周期仍待完成）。
 - [ ] P3 数据库迁移、SQLite/PostgreSQL、Redis 和 Compose 环境。
 - [ ] P4 CI lint/type/test/build/security/license/secret gates。
 
