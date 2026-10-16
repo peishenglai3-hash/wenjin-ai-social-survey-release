@@ -1,10 +1,11 @@
 # Wenjin 发布候选报告（2026-10-16）
 
-状态：`release candidate`，等待最终前端质量门禁、部署环境证据和发布者复核，不等同于已经公开发布。
+状态：`public source published`。公开源码已发布；生产部署证据、知识版权/伦理人工批准和部署级供应链复核仍未完成。
 
 当前分支：`codex/wenjin-evolution-v2`  
-本次候选审计基于 `6e6a6ad` 之后的本地工作树；最终审计提交哈希以本地 `git log` 为准。
-公开仓库 `main`：未修改、未推送。原 `ai-social-survey` master 基线：`c759f6f415a55c3f66efde17627b57c5415b1791`。
+本次候选审计最终提交：`614af4b1581afed8d517757c5f1b0f44217fceda`。
+公开仓库 `main`：已推送并与上述提交一致；CI run `38917875199` 的 backend、frontend、repository-hygiene 全部成功。原 `ai-social-survey` master 基线：`c759f6f415a55c3f66efde17627b57c5415b1791`。
+公开仓库：[peishenglai3-hash/wenjin-ai-social-survey-release](https://github.com/peishenglai3-hash/wenjin-ai-social-survey-release)。
 
 ## 1. 结论摘要
 
@@ -86,15 +87,15 @@
 | Playwright 浏览器 smoke | not run | npm 包存在，但本机未安装 Chromium executable |
 | pip-audit/SBOM/Trivy | not run | 当前环境没有可用的在线依赖审计、SBOM 或镜像扫描工具；不能据此宣称供应链清零 |
 
-## 5. 仍需项目创建者审阅的阻塞项
+## 5. 仍需项目创建者审阅的发布后事项
 
 1. 知识候选的版权/再分发权、翻译质量、场域适配和伦理边界仍需人工批准；在此之前不能生成 `approved` manifest，也不能把原训练书籍/切片恢复到公开树。
 2. PostgreSQL + Redis、Docker Compose、真实浏览器/PWA、生产 HTTPS/CORS/CSP/HSTS 和上传保留清理还没有本机成功证据。
 3. Open API 配额代码已具备事务预留和 profile 锁，但仍需 PostgreSQL 多实例压测证据；后台直接创建 AI service 的异步任务仍需补充用户归属；完整数据导出/删除保留策略、DNS rebinding/SSRF 防护、Python 依赖 lock、SBOM 仍需部署级复核。
-5. 服务端 BYOK 已实现，但它仍是部署者后端环境配置，不是让浏览器把 provider key 直接交给公共 API；ORCID/技能市场的外部审查和完整 typed SDK、webhook、公共 streaming 仍不属于本候选完成范围。
+4. 服务端 BYOK 已实现，但它仍是部署者后端环境配置，不是让浏览器把 provider key 直接交给公共 API；ORCID/技能市场的外部审查和完整 typed SDK、webhook、公共 streaming 仍不属于本候选完成范围。
 
 ## 6. 发布建议与回滚
 
-当前建议：保留候选分支和私有备份，先由项目创建者审阅本报告、知识审计报告和 `docs/MARKDOWN_INVENTORY.md`，完成剩余环境/版权/依赖闸门后，再单独确认是否将候选普通推送到公开仓库 `main`。本轮没有执行任何公开推送、强推、可见性变更或私有备份删除。
+当前建议：公开仓库已经建立并通过普通 push 发布 clean-history `main`；继续保留候选分支和私有备份，不把原始书籍、PDF/OCR、切片、知识卡片、日志或未批准材料复制到公开树。后续若部署服务，应先完成 PostgreSQL/Redis、浏览器、HTTPS、数据保留和供应链扫描证据，再把服务标记为可运营版本。本轮没有执行强推、私有备份删除或旧仓库改写。
 
 回滚路径是回到候选前的已提交 commit；协作前端可通过 `VITE_COLLABORATION_V1_ENABLED=false` 保持关闭，知识 runtime 可不设置 `KNOWLEDGE_DIR`，Open API provider 可保持未配置或关闭。
