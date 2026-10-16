@@ -28,7 +28,7 @@
 - [ ] K2 原有知识/训练材料分类、脱敏、授权和版本登记。
 - [x] K3 使用联网研究整理中英文社会调查资料候选集（私有审计暂存）。
 - [x] 委派独立知识审计子代理，禁止其写入公开 runtime。
-- [ ] K4 人工批准前的事实、译文、许可、隐私、偏差和 prompt/skill 审计。
+- [ ] K4 人工批准前的事实、译文、许可、隐私、偏差和 prompt/skill 审计（内置 skill 已增加统一证据/隐私守则；外部候选仍需人工复核）。
 - [ ] K5 只导入 `approved` 且未撤销知识，并验证撤销传播。
 
 ## WISE、协作与 API
@@ -38,7 +38,7 @@
 - [x] C1 协作项目、成员、角色、邀请和归属模型（双用户拒绝测试已覆盖）。
 - [x] C2 版本、批注、审核任务、审计事件和可撤销脱敏分享（删除/保留策略与分页待补）。
 - [ ] C3 后端协作 API、权限矩阵、分页、幂等和错误契约（成员/邀请/角色/审计/研究产物列表已支持 bounded offset pagination；统一 envelope、删除保留策略和竞态幂等仍待完成）。
-- [ ] C4 前端协作最小闭环和安全默认 feature flag。
+- [x] C4 前端协作最小闭环和安全默认 feature flag（成员元数据/研究产物入口；默认关闭，不实现实时共同编辑）。
 - [ ] C5 接口与浏览器 smoke，不实现实时共同编辑。
 - [x] A1 provider contract、fake provider、capability manifest 和契约测试（无网络 fake 与错误边界已覆盖）。
 - [x] A2 OpenAI-compatible/DashScope server-side BYOK adapters（服务端 key、无 key fail-closed 和上游错误归一化已覆盖）。

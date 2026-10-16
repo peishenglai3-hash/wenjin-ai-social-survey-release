@@ -1,6 +1,6 @@
 # Wenjin 开源演进 V2 实施计划
 
-状态：已批准，实施中（阶段 0 / 阶段 1）
+状态：已批准，分阶段实施中（平台硬化、知识闸门、WISE、协作和 Open API 已有可验收切片；发布闸门尚未通过）
 
 日期：2026-10-16
 
@@ -10,7 +10,7 @@
 
 - [`SPEC-WENJIN-OPEN-SOURCE-EVOLUTION-V2.md`](../SPEC-WENJIN-OPEN-SOURCE-EVOLUTION-V2.md)
 - [`docs/OPEN_SOURCE_EVOLUTION_CAPABILITY_MAP.md`](../docs/OPEN_SOURCE_EVOLUTION_CAPABILITY_MAP.md)
-- 原仓库功能与私有备份评估：`C:\Users\35636\Documents\ChatGPT\ai-social-survey-private-backup-20261015`
+- 原仓库功能与私有备份评估：部署者本机的私有备份目录（不写入公开文档，不随仓库分发）
 
 ## 1. 目标和硬约束
 
