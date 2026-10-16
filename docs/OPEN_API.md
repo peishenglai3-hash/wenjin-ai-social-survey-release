@@ -74,3 +74,9 @@ API token 生命周期、webhook、SDK、流式公开端点、embedding/vision/t
 ## 客户端与 WebSocket 边界
 
 HTTP 客户端只需要登录后的问津 access token。田野实时 ASR、pipeline 和 facial WebSocket 入口使用浏览器可发送的 `Sec-WebSocket-Protocol: bearer, <access-token>` 协商方式；服务端只返回 `bearer` 子协议，拒绝缺失、过期或非 access token。不要把 token 拼到 WebSocket URL、日志或示例链接中。
+
+## 最小客户端与兼容性
+
+仓库提供一个不依赖第三方 SDK 的示例客户端 [`examples/open_api_client.py`](../examples/open_api_client.py)。它只接收问津后端地址和登录 access token，不接受 provider key；生产调用方应自行处理 token 生命周期、重试提示和本地日志脱敏。
+
+可审阅的 V1 合同快照位于 [`docs/open-api-v1.snapshot.json`](open-api-v1.snapshot.json)，并由后端测试检查路径、schema 和禁止的客户端凭据字段。V1 的兼容规则是：在 `/api/v1` 内只做向后兼容的新增字段/能力；移除字段、改变语义或改变认证方式必须进入新的版本路径，并同步更新快照、示例和变更说明。

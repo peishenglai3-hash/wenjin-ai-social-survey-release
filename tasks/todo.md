@@ -43,7 +43,7 @@
 - [x] A1 provider contract、fake provider、capability manifest 和契约测试（无网络 fake 与错误边界已覆盖）。
 - [x] A2 OpenAI-compatible/DashScope server-side BYOK adapters（服务端 key、无 key fail-closed 和上游错误归一化已覆盖）。
 - [x] A3 gateway scope、项目归属、限流、配额、有限重试、运营审计和 redaction（API token 生命周期、webhook、SDK 与扩展隔离待补）。
-- [ ] A4 OpenAPI snapshot、最小 SDK、示例和兼容性文档。
+- [x] A4 OpenAPI snapshot、最小标准库 SDK、示例和兼容性文档（流式公开端点仍未纳入 V1）。
 - [ ] A5 扩展执行隔离拒绝测试和安全边界说明。
 
 ## 文档与发布
