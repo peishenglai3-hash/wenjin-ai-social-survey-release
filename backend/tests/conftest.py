@@ -3,6 +3,7 @@
 import os
 import sys
 from collections.abc import AsyncGenerator
+from itertools import count
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -21,6 +22,7 @@ from app.core.database import get_db
 
 # ── In-memory SQLite for tests ──────────────────────────────────────────
 TEST_DATABASE_URL = "sqlite+aiosqlite://"
+_test_client_counter = count(1)
 
 
 @pytest.fixture
@@ -79,7 +81,12 @@ async def client(db_session) -> AsyncGenerator[AsyncClient, None]:
     app.dependency_overrides[get_db] = _override_get_db
     app.dependency_overrides[require_user] = _override_require_user
     app.dependency_overrides[get_current_profile] = _override_current_profile
-    transport = ASGITransport(app=app)
+    # The production middleware deliberately rate-limits by client IP.  Give
+    # each isolated test client its own documentation-only TEST-NET address so
+    # a long suite cannot make later tests fail because of earlier requests.
+    client_number = next(_test_client_counter)
+    test_ip = f"198.18.{client_number // 250}.{client_number % 250 + 1}"
+    transport = ASGITransport(app=app, client=(test_ip, 12345))
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
